@@ -1,0 +1,17 @@
+{
+  "extends":"../../tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "baseUrl": "./",
+    "paths": {
+      "@@/*": [".dumi/tmp/*"]
+    },
+    // dumi 推荐配置
+    "module": "esnext",
+    "target": "esnext",
+    "jsx": "react-jsx"
+  },
+  "include": [".dumirc.ts"],
+}

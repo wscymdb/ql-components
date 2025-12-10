@@ -1,0 +1,9 @@
+/**
+ * @filename: lint-staged.config.js
+ * @type {import('lint-staged').Configuration}
+ */
+export default {
+    // 数组中表示执行的命令
+    "*.{js,jsx,ts,tsx}": ["pnpm lint:es", "pnpm spellcheck"],
+    "*.css": ["pnpm lint:style", "pnpm spellcheck"]
+}

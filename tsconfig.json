@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "lib": ["DOM", "ESNext"],
+        "allowJs": true,
+        "module": "commonjs",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "declaration": true,
+        "jsx": "react-jsx",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "experimentalDecorators": true,
+        "moduleResolution": "node",
+    },
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "display": "Base",
+}

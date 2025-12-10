@@ -1,0 +1,4 @@
+echo "husky commit-msg"
+
+# 使用 commitlint 校验 Git 提交信息的格式规范。
+npx commitlint --edit $1
