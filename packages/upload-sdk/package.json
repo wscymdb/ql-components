@@ -1,7 +1,7 @@
 {
-    "name": "@ql-components/upload-sdk",
+    "name": "@ql-react-components/upload-sdk",
     "version": "0.0.1",
-    "description": "react upload sdk",
+    "description": "基于react的大文件上传sdk",
     "type": "module",
     "module": "es/index.js",
     "types": "es/index.d.ts",
@@ -9,9 +9,24 @@
         "dev": "tsup --watch",
         "build": "tsup"
     },
+    "files": [
+        "es",
+        "README.md"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "keywords": [],
-    "author": "puta",
-    "license": "ISC",
+    "authors": [
+        "puta"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/wscymdb/ql-components"
+    },
+    "homepage": "https://github.com/wscymdb/ql-components",
     "devDependencies": {
         "@types/react": "^18.0.33",
         "esbuild": "0.27.1",

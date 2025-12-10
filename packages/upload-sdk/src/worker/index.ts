@@ -1,5 +1,16 @@
-import { callMainThread, calculateFileHash, request, log, initRPCListener, resolveUrl } from "./worker.utils"
-import type { WorkerInitPayload, WorkerMessage, RequestOption, ChunkItem } from "../types"
+import {
+    callMainThread,
+    calculateFileHash,
+    log,
+    initRPCListener,
+    requestWithValidate
+} from "./worker.utils"
+import type {
+    WorkerInitPayload,
+    WorkerMessage,
+    RequestOption,
+    ChunkItem
+} from "../types"
 
 // 1. 启动 RPC 监听
 initRPCListener()
@@ -12,12 +23,25 @@ self.onmessage = async (e: MessageEvent<any>) => {
     if (e.data.type !== "init") return
 
     const { file, uid, config } = e.data as WorkerInitPayload
-    const { serverUrl, chunkSize = 5 * 1024 * 1024, concurrency = 3, token, checkEnabled, showLog = true, apiPaths } = config
+    const {
+        serverUrl,
+        chunkSize = 5 * 1024 * 1024,
+        concurrency = 3,
+        token,
+        checkEnabled,
+        showLog = true,
+        apiPaths
+    } = config
+
+    // 提取公共配置供 requestWithValidate 使用
+    const reqConfig = { serverUrl, token }
 
     // 默认生成器
     const defaultGenerators = {
         check: (ctx: any) => ({
-            url: `${serverUrl}${apiPaths?.check || "/upload_already"}?HASH=${ctx.hash}`,
+            url: `${serverUrl}${apiPaths?.check || "/upload_already"}?HASH=${
+                ctx.hash
+            }`,
             method: "GET"
         }),
         upload: (_ctx: any) => ({
@@ -29,12 +53,19 @@ self.onmessage = async (e: MessageEvent<any>) => {
             url: `${serverUrl}${apiPaths?.merge || "/upload_merge"}`,
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ HASH: ctx.hash, count: String(ctx.count) })
+            body: new URLSearchParams({
+                HASH: ctx.hash,
+                count: String(ctx.count)
+            })
         })
     }
 
     // 辅助：执行 Hook 步骤
-    const executeStep = async <T>(hookName: any, defaultFn: (c: any) => T, localCtx: any): Promise<T> => {
+    const executeStep = async <T>(
+        hookName: any,
+        defaultFn: (c: any) => T,
+        localCtx: any
+    ): Promise<T> => {
         // 剔除 Blob/File，只传轻量元数据给主线程
         const { chunk: _chunk, file: _file, ...rpcCtx } = localCtx
 
@@ -49,25 +80,28 @@ self.onmessage = async (e: MessageEvent<any>) => {
         // 1. 纯数学计算，瞬间完成
         const totalChunks = Math.ceil(file.size / chunkSize)
 
-        // --- 2. Init ---
-        const initData = await callMainThread(uid, "init", {
-            count: totalChunks,
-            chunkSize: chunkSize
-        })
-
-        // --- 3. Hash ---
+        // --- 2. Hash ---
         log(showLog, `[${uid}] Calculating Hash...`)
-        let hash = (await callMainThread<string>(uid, "calculateHash", { initData })) || ""
-        if (!hash) hash = await calculateFileHash(file)
+        const hash = await calculateFileHash(file)
         log(showLog, `[${uid}] Hash: ${hash}`)
 
         const suffix = file.name.split(".").pop() || "tmp"
+
+        // --- 3. Init ---
+        const initData = await callMainThread(uid, "init", {
+            count: totalChunks,
+            chunkSize: chunkSize,
+            hash
+        })
 
         // --- 4. 切片 ---
         const chunksList: ChunkItem[] = []
         for (let i = 0; i < totalChunks; i++) {
             chunksList.push({
-                file: file.slice(i * chunkSize, Math.min((i + 1) * chunkSize, file.size)),
+                file: file.slice(
+                    i * chunkSize,
+                    Math.min((i + 1) * chunkSize, file.size)
+                ),
                 filename: `${hash}_${i + 1}.${suffix}`,
                 index: i + 1
             })
@@ -77,11 +111,21 @@ self.onmessage = async (e: MessageEvent<any>) => {
         let uploadedList: string[] = []
         if (checkEnabled) {
             try {
-                const opt = await executeStep<RequestOption>("check", defaultGenerators.check, { hash, filename: file.name, initData })
+                const ctx = { hash, filename: file.name, initData }
+                const opt = await executeStep<RequestOption>(
+                    "check",
+                    defaultGenerators.check,
+                    ctx
+                )
 
-                opt.url = resolveUrl(serverUrl, opt.url)
+                const res = await requestWithValidate(
+                    uid,
+                    opt,
+                    ctx,
+                    "check",
+                    reqConfig
+                )
 
-                const res = await request(opt, token)
                 if (res?.fileList) uploadedList = res.fileList
             } catch (e) {
                 /* ignore */
@@ -91,17 +135,22 @@ self.onmessage = async (e: MessageEvent<any>) => {
         }
 
         // --- 6. Upload (重点) ---
-        const chunksToDo = chunksList.filter(c => !uploadedList.includes(c.filename))
+        const chunksToDo = chunksList.filter(
+            c => !uploadedList.includes(c.filename)
+        )
 
         if (chunksToDo.length === 0) {
-            self.postMessage({ type: "progress", uid, percent: 100 } as WorkerMessage)
+            self.postMessage({
+                type: "progress",
+                uid,
+                percent: 100
+            } as WorkerMessage)
         } else {
             let finishedCount = uploadedList.length
             const pool = new Set<Promise<any>>()
 
             for (const chunkItem of chunksToDo) {
-                // A. 获取配置
-                const opt = await executeStep<RequestOption>("upload", defaultGenerators.upload, {
+                const ctx = {
                     hash,
                     chunk: chunkItem.file,
                     filename: chunkItem.filename,
@@ -109,20 +158,29 @@ self.onmessage = async (e: MessageEvent<any>) => {
                     count: totalChunks,
                     chunkSize,
                     initData
-                })
-
-                opt.url = resolveUrl(serverUrl, opt.url)
+                }
+                // A. 获取配置
+                const opt = await executeStep<RequestOption>(
+                    "upload",
+                    defaultGenerators.upload,
+                    ctx
+                )
 
                 // B. 【核心】自动组装 FormData
                 // 这里的逻辑是：如果用户返回了 JSON body，我们就把它塞进 FormData，并把切片塞进去
                 let finalBody: BodyInit | null = opt.body as BodyInit
 
                 // 仅当 POST 且 body 不是 FormData 实例时，自动组装
-                if ((!opt.method || opt.method === "POST") && !(finalBody instanceof FormData)) {
+                if (
+                    (!opt.method || opt.method === "POST") &&
+                    !(finalBody instanceof FormData)
+                ) {
                     const fd = new FormData()
                     // 1. 塞入用户自定义字段
                     if (opt.body && typeof opt.body === "object") {
-                        Object.entries(opt.body).forEach(([k, v]) => fd.append(k, v))
+                        Object.entries(opt.body).forEach(([k, v]) =>
+                            fd.append(k, v)
+                        )
                     }
                     // 2. 塞入切片 (默认字段 'file')
                     fd.append(opt.chunkFieldName || "file", chunkItem.file)
@@ -135,12 +193,20 @@ self.onmessage = async (e: MessageEvent<any>) => {
                     finalBody = fd
                 }
 
-                const task = request({ ...opt, body: finalBody }, token).then(() => {
+                const task = requestWithValidate(
+                    uid,
+                    { ...opt, body: finalBody },
+                    ctx,
+                    "upload",
+                    reqConfig
+                ).then(() => {
                     finishedCount++
                     self.postMessage({
                         type: "progress",
                         uid,
-                        percent: Number(((finishedCount / totalChunks) * 100).toFixed(2))
+                        percent: Number(
+                            ((finishedCount / totalChunks) * 100).toFixed(2)
+                        )
                     } as WorkerMessage)
                     pool.delete(task)
                 })
@@ -152,16 +218,19 @@ self.onmessage = async (e: MessageEvent<any>) => {
         }
 
         // --- 7. Merge ---
-        const mergeOpt = await executeStep<RequestOption>("merge", defaultGenerators.merge, {
+        const ctx = {
             hash,
             count: totalChunks,
             filename: file.name,
             initData
-        })
+        }
+        const mergeOpt = await executeStep<RequestOption>(
+            "merge",
+            defaultGenerators.merge,
+            ctx
+        )
 
-        mergeOpt.url = resolveUrl(serverUrl, mergeOpt.url)
-
-        await request(mergeOpt, token)
+        await requestWithValidate(uid, mergeOpt, ctx, "merge", reqConfig)
 
         self.postMessage({ type: "done", uid, hash } as WorkerMessage)
     } catch (error) {

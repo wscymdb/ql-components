@@ -52,8 +52,10 @@ export const callMainThread = <T>(
  * 通用请求函数
  */
 export const request = async (opt: RequestOption, token?: string) => {
-    const headers: Record<string, string> = { ...opt.headers }
-    if (token) headers["Authorization"] = `Bearer ${token}`
+    const headers: Record<string, string> = {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...opt.headers
+    }
 
     // 注意：Worker 主逻辑会负责把 body 转换成 FormData，这里直接发
     const response = await fetch(opt.url, {
@@ -70,6 +72,52 @@ export const request = async (opt: RequestOption, token?: string) => {
     }
 }
 
+/**
+ * 【新增】带业务校验的请求函数
+ *
+ * 核心功能：
+ * 1. 自动拼接 API 绝对路径
+ * 2. 发起 HTTP 请求
+ * 3. 剔除 Context 中的大文件对象 (Blob/File)
+ * 4. 通过 RPC 调用主线程的 validateResponse 钩子
+ * 5. 如果主线程抛错，则中断流程
+ *
+ * @param uid 文件唯一ID (用于 RPC 通信)
+ * @param opt 请求配置对象
+ * @param rawCtx 原始 Hook 上下文 (包含 chunk/file 等大对象)
+ * @param hookName 当前处于哪个阶段 ('check' | 'upload' | 'merge')
+ * @param config 包含 serverUrl 和 token 的配置对象
+ */
+export const requestWithValidate = async (
+    uid: string,
+    opt: RequestOption,
+    rawCtx: any,
+    hookName: string,
+    config: { serverUrl: string; token?: string }
+) => {
+    // 1. 处理 URL (相对路径 -> 绝对路径)
+    opt.url = resolveUrl(config.serverUrl, opt.url)
+
+    // 2. 发起底层请求
+    const res = await request(opt, config.token)
+
+    // 3. 清理上下文 (RPC 不能传输 Blob/File，必须剔除)
+    const { chunk: _c, file: _f, ...cleanCtx } = rawCtx
+
+    // 4. RPC 业务校验
+    try {
+        await callMainThread(uid, "validateResponse", {
+            ...cleanCtx,
+            response: res, // 将后端返回结果注入
+            hookName // 告知主线程当前阶段
+        })
+    } catch (err: any) {
+        // 捕获主线程抛出的业务错误
+        throw new Error(err?.message || "Server Validation Failed")
+    }
+
+    return res
+}
 /**
  * 计算 Hash
  */
