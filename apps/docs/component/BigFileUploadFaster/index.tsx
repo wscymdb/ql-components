@@ -1,4 +1,4 @@
-import { Button } from "antd"
+import { Button, message } from "antd"
 import { useEffect, useState } from "react"
 import AddModal from "./AddModal"
 import { useUpload } from "@ql-react-components/upload-sdk"
@@ -10,32 +10,53 @@ const BigFileUpload = () => {
     const [show, setShow] = useState(false)
     const { uploadMap, setUploadConfig } = useUpload()
 
-    // 上传文件时，防止关闭浏览器窗口
     useEffect(() => {
         setUploadConfig({
-            preventWindowClose: true,
-            serverUrl: isDev ? window.location.origin : "http://localhost:8888",
+            preventWindowClose: false,
             checkEnabled: false,
+            showLog: true,
+            serverUrl: isDev
+                ? window.location.origin
+                : "http://172.22.50.33:20085",
             token: authorization,
             hooks: {
                 init: async ctx => {
-                    console.log(ctx, "init")
-                    const res = await fetch("/api/lazy")
-                    await res.json()
-                    throw new Error("init error")
+                    const { file, hash, count } = ctx
+                    const res = await fetch("/dcau-api/minio/upload/init", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            authorization: `Bearer ${authorization}`
+                        },
+                        body: JSON.stringify({
+                            originalName: file?.name,
+                            // originalUrl: '/',
+                            fileSize: file?.size,
+                            chunkSize: count,
+                            oid: hash,
+                            datasetId: "1998960263005573122"
+                        })
+                    })
 
-                    return {
-                        name: "zs",
-                        age: 14
+                    const json = await res.json()
+
+                    if (json?.code !== 200) {
+                        message.error(json?.message || "初始化上传失败")
+                        throw new Error(json?.message || "初始化上传失败")
                     }
+
+                    return json.data || {}
                 },
                 upload: ctx => {
-                    console.log(ctx, "ctxupload")
-                    const { filename } = ctx
+                    const { initData, filename, index } = ctx
+
                     return {
-                        url: "/api/upload_chunk",
+                        // url: "/dcau-api/minio/upload/part",
+                        url: "/abc/upload_chunk",
                         method: "POST",
                         body: {
+                            id: initData?.id,
+                            chunkNumber: index,
                             filename
                         },
                         chunkFieldName: "file"
@@ -43,19 +64,14 @@ const BigFileUpload = () => {
                 },
 
                 merge: ctx => {
-                    console.log(ctx, "ctxmerge")
-
                     return {
-                        url: `/api/upload_merge`,
-                        method: "POST",
-                        body: JSON.stringify({
-                            HASH: ctx.hash,
-                            count: ctx.count
-                        }),
-                        headers: {
-                            "Content-Type": "application/json"
-                        }
+                        url: `/dcau-api/minio/upload/complete?id=${ctx.initData?.id}`,
+                        method: "GET"
                     }
+                },
+                validateResponse(_ctx) {
+                    // console.log(ctx, "validateResponse")
+                    throw new Error("上传失败，请重试")
                 }
             }
         })

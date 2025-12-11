@@ -11,6 +11,7 @@ import type {
     RequestOption,
     ChunkItem
 } from "../types"
+import { formatError } from "../utils"
 
 // 1. 启动 RPC 监听
 initRPCListener()
@@ -237,7 +238,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
         self.postMessage({
             type: "error",
             uid,
-            error: error instanceof Error ? error.message : String(error)
+            error: formatError(error)
         } as WorkerMessage)
     }
 }

@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 // 假设你的核心逻辑在 ../core 目录下
-import type { GlobalUploadState, UploadConfig, SingleFileState } from "../types"
+import {
+    type GlobalUploadState,
+    type UploadConfig,
+    type SingleFileState
+} from "@/types"
 import { UploadManager } from "@/core"
+import { UploadBatchError } from "@/utils/UploadBatchError"
 
 // 获取单例 (在模块加载时就初始化，保证整个 App 只有一个 Manager)
 const manager = UploadManager.getInstance()
@@ -9,7 +14,9 @@ const manager = UploadManager.getInstance()
 export const useUpload = () => {
     // 1. 初始化状态
     // 直接从 manager 获取最新快照，防止组件重新挂载时状态回退
-    const [uploadMap, setUploadMap] = useState<GlobalUploadState>(() => manager.getState())
+    const [uploadMap, setUploadMap] = useState<GlobalUploadState>(() =>
+        manager.getState()
+    )
 
     // 2. RAF 引用
     // 用于存储 requestAnimationFrame 的 ID，以便在组件卸载或任务结束时取消轮询
@@ -31,7 +38,9 @@ export const useUpload = () => {
             setUploadMap(latestState)
 
             // C. 检查是否还有任务在跑
-            const isUploading = Object.values(latestState).some(item => item.status === "uploading")
+            const isUploading = Object.values(latestState).some(
+                item => item.status === "uploading"
+            )
 
             // D. 如果还在上传，预约下一帧继续查询
             if (isUploading) {
@@ -46,7 +55,9 @@ export const useUpload = () => {
         // 订阅逻辑：作为“点火器”
         // ============================================================
         const unsubscribe = manager.subscribe(newState => {
-            const isUploading = Object.values(newState).some(item => item.status === "uploading")
+            const isUploading = Object.values(newState).some(
+                item => item.status === "uploading"
+            )
 
             // 1. 如果监测到任务开始，且轮询还没跑，就启动轮询
             if (isUploading && !rafIdRef.current) {
@@ -66,7 +77,9 @@ export const useUpload = () => {
         // 如果用户从 Page A 跳到 Page B，Manager 还在跑，
         // 这里能检测到并立即恢复 RAF 轮询，进度条无缝衔接。
         const startState = manager.getState()
-        if (Object.values(startState).some(item => item.status === "uploading")) {
+        if (
+            Object.values(startState).some(item => item.status === "uploading")
+        ) {
             loopQuery()
         }
 
@@ -88,13 +101,34 @@ export const useUpload = () => {
      * 支持单个 File 或 FileList (AntD, 原生 input)
      */
 
-    const startUpload = useCallback((fileList: any[]) => {
+    const startUpload = useCallback(async (fileList: any[]) => {
         // 兼容 AntD 的 FileList 类数组转普通数组
-        const files = Array.isArray(fileList) ? fileList : Array.from(fileList || [])
+        const files = Array.isArray(fileList)
+            ? fileList
+            : Array.from(fileList || [])
 
-        files.forEach(file => {
-            manager.startUpload(file)
+        // 1. 拿到所有 Promise
+        const tasks = files.map(file => manager.startUpload(file))
+
+        // 2. 等待全部结束 (无论成功失败)
+        const rawResults = await Promise.allSettled(tasks)
+
+        // 3. 解析结果
+        const results = rawResults.map(res => {
+            if (res.status === "fulfilled") return res.value
+
+            return res.reason // 这里拿到的就是 Manager 里 reject 的 UploadErrorResult
         })
+
+        // 4. 如果有错误，抛出包含完整结果的异常，供业务层(Modal)捕获
+        const hasError = results.some(r => r.status === "error")
+
+        if (hasError) {
+            // 【修改】使用自定义类抛出
+            throw new UploadBatchError("部分文件上传失败", results)
+        }
+
+        return results
     }, [])
 
     /**

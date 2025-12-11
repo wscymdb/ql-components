@@ -7,10 +7,13 @@ import type {
     RPCCallPayload,
     RPCResultPayload,
     HookContext,
-    SingleFileState
+    SingleFileState,
+    UploadSuccessResult,
+    UploadErrorResult
 } from "@/types"
 
 import workerCode from "../../worker/index?worker"
+import { formatError } from "@/utils"
 
 // 默认配置
 const DEFAULT_CONFIG: UploadConfig = {
@@ -19,6 +22,7 @@ const DEFAULT_CONFIG: UploadConfig = {
     concurrency: 3,
     checkEnabled: true,
     preventWindowClose: true,
+    showLog: false,
     apiPaths: {
         check: "/upload_already",
         upload: "/upload_chunk",
@@ -37,10 +41,22 @@ export class UploadManager {
     // 用于在 RPC 调用时找回原始文件
     private fileRegistry: Map<string, File> = new Map()
 
+    // Promise 句柄类型：resolve 的值改为 UploadSuccessResult
+    // reject 的值改为 UploadErrorResult
+    private promiseMap: Map<
+        string,
+        {
+            resolve: (val: UploadSuccessResult) => void
+            reject: (val: UploadErrorResult) => void
+        }
+    > = new Map()
+
     private constructor() {
         window.addEventListener("beforeunload", e => {
             if (!this.config.preventWindowClose) return
-            const isUploading = Object.values(this.state).some(item => item.status === "uploading")
+            const isUploading = Object.values(this.state).some(
+                item => item.status === "uploading"
+            )
             if (isUploading) e.preventDefault()
         })
     }
@@ -49,7 +65,9 @@ export class UploadManager {
         if (!this.worker) {
             // 这里因为我们采取的方式是打包的时候把worker作为內联的方式，所以这里不需要生成临时的 URL
             // 1. 把字符串代码包装成 Blob 对象
-            const blob = new Blob([workerCode], { type: "application/javascript" })
+            const blob = new Blob([workerCode], {
+                type: "application/javascript"
+            })
             // 2. 生成一个临时的 URL (blob:http://...)
             const workerUrl = URL.createObjectURL(blob)
             // 3. 传给原生 Worker 构造函数
@@ -72,6 +90,10 @@ export class UploadManager {
 
                 // 3. 状态变更
                 const { uid } = msg
+
+                // 获取当前任务的 Promise 句柄 和 原始文件
+                const promiseHandler = this.promiseMap.get(uid)
+                const originalFile = this.fileRegistry.get(uid)
                 switch (msg.type) {
                     case "progress":
                         this.updateFileState(uid, {
@@ -85,10 +107,36 @@ export class UploadManager {
                             progress: 100,
                             hash: msg.hash
                         })
+                        // 结算 Promise：成功
+                        if (promiseHandler && originalFile) {
+                            promiseHandler.resolve({
+                                status: "success",
+                                uid,
+                                file: originalFile,
+                                hash: msg.hash
+                            })
+                            this.promiseMap.delete(uid) // 清理 Promise 句柄
+                        }
+
                         this.fileRegistry.delete(uid) // 清理内存
                         break
                     case "error":
-                        this.updateFileState(uid, { status: "error", errorMsg: msg.error })
+                        this.updateFileState(uid, {
+                            status: "error",
+                            errorMsg: msg.error
+                        })
+
+                        // 结算 Promise：失败 (注意这里我们是 reject 一个对象)
+                        if (promiseHandler && originalFile) {
+                            promiseHandler.reject({
+                                status: "error",
+                                uid,
+                                file: originalFile,
+                                error: new Error(msg.error) // 把错误信息包装成 Error 对象
+                            })
+                            this.promiseMap.delete(uid) // 清理 Promise 句柄
+                        }
+
                         this.fileRegistry.delete(uid) // 清理内存
                         console.error(`上传失败 [${uid}]:`, msg.error)
                         break
@@ -103,7 +151,11 @@ export class UploadManager {
      */
     private async handleRPCCall(payload: RPCCallPayload) {
         const { reqId, hookName, ctx, uid } = payload
-        const reply: RPCResultPayload = { type: "hook_result", reqId, data: null }
+        const reply: RPCResultPayload = {
+            type: "hook_result",
+            reqId,
+            data: null
+        }
 
         try {
             // 1. 获取全局配置的 Hook 函数
@@ -121,7 +173,7 @@ export class UploadManager {
                 reply.data = result
             }
         } catch (error) {
-            reply.error = error instanceof Error ? error.message : String(error)
+            reply.error = formatError(error)
         }
 
         // 5. 返回结果给 Worker
@@ -129,7 +181,11 @@ export class UploadManager {
     }
 
     private updateFileState(uid: string, payload: Partial<SingleFileState>) {
-        const oldFileState = this.state[uid] || { uid, progress: 0, status: "idle" }
+        const oldFileState = this.state[uid] || {
+            uid,
+            progress: 0,
+            status: "idle"
+        }
         this.state = { ...this.state, [uid]: { ...oldFileState, ...payload } }
         this.listeners.forEach(l => l(this.state))
     }
@@ -137,7 +193,8 @@ export class UploadManager {
     // --- Public API ---
 
     static getInstance() {
-        if (!UploadManager.instance) UploadManager.instance = new UploadManager()
+        if (!UploadManager.instance)
+            UploadManager.instance = new UploadManager()
         return UploadManager.instance
     }
 
@@ -161,34 +218,38 @@ export class UploadManager {
     }
 
     public startUpload(file: any, customOptions?: Partial<UploadConfig>) {
-        const rawFile = file.originFileObj ? file.originFileObj : file
-        const uid = rawFile.uid || `${Date.now()}`
+        return new Promise((resolve, reject) => {
+            const rawFile = file.originFileObj ? file.originFileObj : file
+            const uid = rawFile.uid || `${Date.now()}`
 
-        // 1. 注册文件 (供 RPC 使用)
-        this.fileRegistry.set(uid, rawFile)
+            // 1. 注册文件 (供 RPC 使用)
+            this.fileRegistry.set(uid, rawFile)
 
-        this.updateFileState(uid, { uid, status: "uploading", progress: 0 })
+            this.promiseMap.set(uid, { resolve, reject })
 
-        if (customOptions) this.setConfig(customOptions)
+            this.updateFileState(uid, { uid, status: "uploading", progress: 0 })
 
-        const worker = this.initWorker()
+            if (customOptions) this.setConfig(customOptions)
 
-        // 2. 发送初始化消息 (只传基础配置)
-        const payload: WorkerInitPayload = {
-            type: "init",
-            uid,
-            file: rawFile,
-            config: {
-                serverUrl: this.config.serverUrl,
-                chunkSize: this.config.chunkSize,
-                concurrency: this.config.concurrency,
-                token: this.config.token,
-                checkEnabled: this.config.checkEnabled,
-                apiPaths: this.config.apiPaths,
-                showLog: this.config.showLog
+            const worker = this.initWorker()
+
+            // 2. 发送初始化消息 (只传基础配置)
+            const payload: WorkerInitPayload = {
+                type: "init",
+                uid,
+                file: rawFile,
+                config: {
+                    serverUrl: this.config.serverUrl,
+                    chunkSize: this.config.chunkSize,
+                    concurrency: this.config.concurrency,
+                    token: this.config.token,
+                    checkEnabled: this.config.checkEnabled,
+                    apiPaths: this.config.apiPaths,
+                    showLog: this.config.showLog
+                }
             }
-        }
 
-        worker.postMessage(payload)
+            worker.postMessage(payload)
+        })
     }
 }

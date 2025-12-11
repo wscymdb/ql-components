@@ -1,7 +1,7 @@
 import type { FC } from "react"
-import { Form, Modal } from "antd"
+import { Form, message, Modal } from "antd"
 import CustomUpload from "../Fieldupload"
-import { useUpload } from "@ql-react-components/upload-sdk"
+import { UploadBatchError, useUpload } from "@ql-react-components/upload-sdk"
 
 interface AddModalProps {
     onClose: (refresh?: boolean) => void
@@ -18,16 +18,38 @@ const AddModal: FC<AddModalProps> = props => {
         try {
             console.log(formData, "formData")
 
-            startUpload(formData.files)
+            const res = await startUpload(formData.files)
+            console.log(res, "res")
             onClose(true)
-        } catch (info) {
-            console.log("Validate Failed:", info)
+        } catch (err) {
+            // 【修改】类型安全地捕获
+            if (err instanceof UploadBatchError) {
+                console.log("完整结果单:", err.results)
+
+                const failCount = err.results.filter(
+                    r => r.status === "error"
+                ).length
+                message.error(`失败了 ${failCount} 个文件`)
+            } else {
+                console.error("发生了未知错误:", err)
+            }
         }
     }
 
     return (
-        <Modal title={title} forceRender open={true} onOk={form.submit} onCancel={() => onClose()}>
-            <Form onFinish={onFinish} form={form} layout="vertical" name="batch_set_form">
+        <Modal
+            title={title}
+            forceRender
+            open={true}
+            onOk={form.submit}
+            onCancel={() => onClose()}
+        >
+            <Form
+                onFinish={onFinish}
+                form={form}
+                layout="vertical"
+                name="batch_set_form"
+            >
                 <Form.Item name="files" label="文件">
                     {/* @ts-expect-error 后面会改正 */}
                     <CustomUpload />

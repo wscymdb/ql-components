@@ -1,5 +1,13 @@
 # @ql-react-components/upload-sdk
 
+## 0.2.0
+
+### Minor Changes
+
+-   API 变更: useUpload 的 startUpload 方法签名变更。
+    -   旧: (files: any[]) => void
+    -   新: (files: any[]) => Promise<UploadResult[]
+
 ## 0.1.1
 
 ### Patch Changes

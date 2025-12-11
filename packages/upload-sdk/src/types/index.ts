@@ -145,3 +145,20 @@ export type WorkerReportMessage =
 
 export type WorkerMessage = RPCCallPayload | WorkerReportMessage
 export type MainToWorkerMessage = WorkerInitPayload | RPCResultPayload
+
+export interface UploadSuccessResult {
+    status: "success"
+    uid: string
+    file: File
+    hash: string
+}
+
+export interface UploadErrorResult {
+    status: "error"
+    uid: string
+    file: File
+    error: any
+}
+
+// 联合类型
+export type UploadResult = UploadSuccessResult | UploadErrorResult
