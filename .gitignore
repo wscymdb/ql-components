@@ -17,3 +17,5 @@ pnpm-lock.yaml
 yarn.lock
 
 node_modules/
+
+.npmrc

@@ -118,8 +118,8 @@ pnpm login
 pnpm changeset
 
 # 4. 应用 changeset，升级版本号
-npx changeset version
+pnpm changeset version
 
 # 5. 发布
-pnpm publish
+pnpm changeset publish
 ```

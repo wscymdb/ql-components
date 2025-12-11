@@ -1,6 +1,6 @@
 {
     "name": "@ql-react-components/upload-sdk",
-    "version": "0.0.0",
+    "version": "0.1.1",
     "description": "基于react的大文件上传sdk",
     "type": "module",
     "module": "es/index.js",
@@ -17,7 +17,10 @@
         "access": "public",
         "registry": "https://registry.npmjs.org/"
     },
-    "keywords": [],
+    "keywords": [
+        "upload-sdk",
+        "ql-components"
+    ],
     "authors": [
         "puta"
     ],
@@ -33,7 +36,7 @@
         "tsup": "8.5.1"
     },
     "peerDependencies": {
-        "react": "^18.3.1",
+        "react": ">=18",
         "hash-wasm": "^4.12.0"
     },
     "dependencies": {}
