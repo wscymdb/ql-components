@@ -114,9 +114,12 @@ pnpm build:sdk
 # 2. 登录 如果登录过了可以跳过这一步
 pnpm login
 
-# 3. 生成 changelog
+# 3. 创建 changeset（收集变更信息）
 pnpm changeset
 
-# 4. 发布
+# 4. 应用 changeset，升级版本号
+npx changeset version
+
+# 5. 发布
 pnpm publish
 ```

@@ -1,6 +1,6 @@
 {
     "name": "ql-react-components",
-    "version": "0.0.1",
+    "version": "0.0.0",
     "description": "基于antd的react组件库",
     "main": "index.js",
     "type": "module",
