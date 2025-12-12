@@ -29,10 +29,12 @@ self.onmessage = async (e: MessageEvent<any>) => {
         chunkSize = 5 * 1024 * 1024,
         concurrency = 3,
         token,
-        checkEnabled,
+        // checkEnabled,
         showLog = true,
         apiPaths
     } = config
+
+    const checkEnabled = false // 暂时不支持秒传
 
     // 提取公共配置供 requestWithValidate 使用
     const reqConfig = { serverUrl, token }

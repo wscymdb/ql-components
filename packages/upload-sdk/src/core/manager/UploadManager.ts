@@ -233,13 +233,23 @@ export class UploadManager {
 
             const worker = this.initWorker()
 
+            // 处理 serverUrl，确保传给 Worker 的是绝对路径
+            let finalServerUrl = this.config.serverUrl
+            // 如果用户配的是相对路径 (如 "/abc" 或 "api")，利用主线程转为绝对路径
+            if (finalServerUrl && !finalServerUrl.startsWith("http")) {
+                // 自动补全为 http://localhost:3000/abc
+                // 这样 Worker 里的 fetch 就能正常工作，同时请求依然发给 localhost，能触发 Proxy
+                finalServerUrl = new URL(finalServerUrl, window.location.origin)
+                    .href
+            }
+
             // 2. 发送初始化消息 (只传基础配置)
             const payload: WorkerInitPayload = {
                 type: "init",
                 uid,
                 file: rawFile,
                 config: {
-                    serverUrl: this.config.serverUrl,
+                    serverUrl: finalServerUrl,
                     chunkSize: this.config.chunkSize,
                     concurrency: this.config.concurrency,
                     token: this.config.token,

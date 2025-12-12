@@ -16,11 +16,11 @@
 ## 📦 安装
 
 ```bash
-npm install upload-sdk
+npm i @ql-react-components/upload-sdk
 # or
-yarn add upload-sdk
+yarn add @ql-react-components/upload-sdk
 # or
-pnpm add upload-sdk
+pnpm add @ql-react-components/upload-sdk
 ```
 
 ## 🔨 快速上手

@@ -1,7 +1,7 @@
 import type { FC } from "react"
-import { Form, message, Modal } from "antd"
+import { Form, Modal } from "antd"
 import CustomUpload from "../Fieldupload"
-import { UploadBatchError, useUpload } from "@ql-react-components/upload-sdk"
+import { useUpload } from "@ql-react-components/upload-sdk"
 
 interface AddModalProps {
     onClose: (refresh?: boolean) => void
@@ -18,21 +18,10 @@ const AddModal: FC<AddModalProps> = props => {
         try {
             console.log(formData, "formData")
 
-            const res = await startUpload(formData.files)
-            console.log(res, "res")
+            startUpload(formData.files)
             onClose(true)
-        } catch (err) {
-            // 【修改】类型安全地捕获
-            if (err instanceof UploadBatchError) {
-                console.log("完整结果单:", err.results)
-
-                const failCount = err.results.filter(
-                    r => r.status === "error"
-                ).length
-                message.error(`失败了 ${failCount} 个文件`)
-            } else {
-                console.error("发生了未知错误:", err)
-            }
+        } catch (info) {
+            console.log("Validate Failed:", info)
         }
     }
 

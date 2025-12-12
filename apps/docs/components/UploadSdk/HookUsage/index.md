@@ -1,0 +1,26 @@
+---
+group:
+    title: 基础
+    order: 0
+title: hooks的使用
+order: 1
+---
+
+## hooks 的使用
+
+某些情况下内置的请求可能无法满足需求，我们提供了内置的 hooks，用于自定义上传请求。
+
+目前一共提供了 3 个 hook：
+
+-   `init`：初始化上传配置 非必填项。
+    -   返回的内容会在`upload`和`merge`的`ctx.initData`中展示。
+-   `upload`：用于获取上传配置 必填项。
+-   `merge`：用于合并上传文件 非必填项。
+
+每个 hook 都有一个 ctx 参数，用于传递上下文信息。详情参考下方文档
+
+upload 和 merge 这两个 hook 我们内置了 fetch 请求，所以之需要返回请求的配置即可
+
+在 upload 中，是拿不到当前的切片的（原因见 FAQ），所以这里不建议使用自定义的请求，而是使用内置的 fetch 请求
+
+<code src="./index.tsx"  desc="hooks的使用"></code>

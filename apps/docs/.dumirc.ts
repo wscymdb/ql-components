@@ -2,7 +2,7 @@ import { defineConfig } from "dumi"
 
 export default defineConfig({
     themeConfig: {
-        name: "@ym/docs"
+        name: "文档"
     },
     proxy: {
         "/api": {

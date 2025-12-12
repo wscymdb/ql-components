@@ -10,6 +10,7 @@ export default defineConfig(_options => ({
     outDir: "es",
     format: ["esm"],
     dts: true,
+    minify: true,
     esbuildPlugins: [inlineWorkerPlugin()],
 
     esbuildOptions(options, _context) {

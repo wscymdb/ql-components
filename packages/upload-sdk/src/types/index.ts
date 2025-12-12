@@ -70,9 +70,9 @@ export interface UploadConfig {
      */
     hooks?: {
         init?: (ctx: HookContext) => Promise<any> | any
-        check?: (ctx: HookContext) => RequestOption
-        upload?: (ctx: HookContext) => RequestOption
-        merge?: (ctx: HookContext) => RequestOption
+        check?: (ctx: HookContext) => Promise<RequestOption> | RequestOption
+        upload?: (ctx: HookContext) => Promise<RequestOption> | RequestOption
+        merge?: (ctx: HookContext) => Promise<RequestOption> | RequestOption
         /**
          * [新增] 校验响应钩子
          * 如果校验不通过，请直接 throw Error('错误信息')
