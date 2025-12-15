@@ -7,6 +7,8 @@
     "private": true,
     "scripts": {
         "dev": "turbo run dev",
+        "build:docs": "pnpm --filter @ql-react-components/docs build",
+        "preview:docs": "pnpm --filter @ql-react-components/docs preview",
         "build:sdk": "pnpm --filter @ql-react-components/upload-sdk build",
         "lint:es": "eslint",
         "lint:fix": "eslint --fix",

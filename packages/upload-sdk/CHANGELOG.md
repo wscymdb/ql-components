@@ -1,5 +1,11 @@
 # @ql-react-components/upload-sdk
 
+## 0.3.2
+
+### Patch Changes
+
+-   README.md 文档迭代
+
 ## 0.3.1
 
 ### Patch Changes

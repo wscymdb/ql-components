@@ -40,6 +40,12 @@
 
 本项目采用 monorepo 的方式管理多个子项目，借助 pnpm 的 workspace 功能实现的，所以请使用**pnpm**来管理依赖
 
+## clone
+
+```bash
+git clone https://github.com/wscymdb/ql-components.git
+```
+
 ## 安装
 
 ```bash
