@@ -3,14 +3,6 @@ import { useEffect, useRef } from "react"
 import { useUpload } from "@ql-react-components/upload-sdk"
 import { UploadOutlined } from "@ant-design/icons"
 
-const request = (data: any) => {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve(data)
-        }, 1000)
-    })
-}
-
 const BigFileUpload = () => {
     const { startUpload } = useUpload()
     const fileListRef = useRef<any[]>([])
@@ -20,41 +12,9 @@ const BigFileUpload = () => {
     useEffect(() => {
         setUploadConfig({
             serverUrl: "/api",
-            hooks: {
-                // async init(_ctx) {
-                //     const res = await request({
-                //         uploadId: "123456"
-                //     })
-                //     return res
-                // },
-                upload(ctx) {
-                    const { initData } = ctx
-                    console.log(initData)
-                    return {
-                        url: "/api/upload_chunk",
-                        method: "POST",
-                        body: {
-                            name: "zs",
-                            age: 18
-                        },
-                        chunkFieldName: "file"
-                    }
-                },
-                async merge(_ctx) {
-                    const _res = await request({
-                        uploadId: "123456"
-                    })
-                    message.success(123)
-                    return {
-                        url: "/api/upload_chunk",
-                        method: "POST",
-                        body: {
-                            name: "zs",
-                            age: 18
-                        },
-                        chunkFieldName: "file"
-                    }
-                }
+            apiPaths: {
+                upload: "/upload",
+                merge: "/complete-upload"
             }
         })
     }, [setUploadConfig])

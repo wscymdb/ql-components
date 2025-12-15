@@ -4,6 +4,7 @@ export default defineConfig({
     themeConfig: {
         name: "文档"
     },
+    publicPath: "/",
     proxy: {
         "/api": {
             target: "http://localhost:8888/",
