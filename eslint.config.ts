@@ -6,10 +6,19 @@ import { defineConfig, globalIgnores } from "eslint/config"
 import path from "node:path"
 
 export default defineConfig([
-    globalIgnores(["dist", "**/.dumi/tmp/**", "es/**"]),
+    globalIgnores([
+        "dist",
+        "**/.dumi/tmp/**",
+        "**/.dumi/tmp-production/**",
+        "es/**"
+    ]),
     {
         files: ["**/*.{ts,tsx}"],
-        extends: [js.configs.recommended, tseslint.configs.recommended, reactHooks.configs.flat.recommended],
+        extends: [
+            js.configs.recommended,
+            tseslint.configs.recommended,
+            reactHooks.configs.flat.recommended
+        ],
 
         languageOptions: {
             ecmaVersion: 2020,

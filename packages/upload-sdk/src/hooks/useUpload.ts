@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-// 假设你的核心逻辑在 ../core 目录下
 import {
     type GlobalUploadState,
     type UploadConfig,
@@ -8,7 +7,6 @@ import {
 import { UploadManager } from "@/core"
 import { UploadBatchError } from "@/utils/UploadBatchError"
 
-// 获取单例 (在模块加载时就初始化，保证整个 App 只有一个 Manager)
 const manager = UploadManager.getInstance()
 
 export const useUpload = () => {
@@ -92,10 +90,6 @@ export const useUpload = () => {
         }
     }, [])
 
-    // ============================================================
-    // Helper Methods (暴露给组件的方法)
-    // ============================================================
-
     /**
      * 触发上传
      * 支持单个 File 或 FileList (AntD, 原生 input)
@@ -121,11 +115,16 @@ export const useUpload = () => {
         })
 
         // 4. 如果有错误，抛出包含完整结果的异常，供业务层(Modal)捕获
-        const hasError = results.some(r => r.status === "error")
+        // 3. 【核心修复】检查是否有 非成功 的项
+        // 只要有一个是 error 或者 cancelled，我们就认为这一批次“不完美”，抛出异常让 UI 处理
+        const hasIssue = results.some(r => r.status !== "success")
 
-        if (hasError) {
-            // 【修改】使用自定义类抛出
-            throw new UploadBatchError("部分文件上传失败", results)
+        if (hasIssue) {
+            // 抛出 UploadBatchError，把完整的结果单带出去
+            throw new UploadBatchError(
+                "Batch upload finished with issues",
+                results
+            )
         }
 
         return results
@@ -156,7 +155,46 @@ export const useUpload = () => {
         manager.setConfig(config)
     }, [])
 
+    /**
+     * 预计算 Hash
+     * 用户在 onChange 时调用
+     */
+    const preCalculate = useCallback(async (fileList: any[]) => {
+        const files = Array.isArray(fileList)
+            ? fileList
+            : Array.from(fileList || [])
+
+        files.forEach(file => {
+            const uid = file.uid || file.originFileObj?.uid
+
+            // 1. 如果 map 里已经有这个文件
+            const current = manager.getState()[uid]
+            if (current) {
+                // 如果已经算完了，或者正在算，或者是正在传，都跳过
+                if (
+                    current.hash ||
+                    current.status === "calculating" ||
+                    current.status === "uploading"
+                ) {
+                    return
+                }
+            }
+
+            // 2. 否则，开始计算
+            manager.computeHash(file).catch(err => {
+                console.error(err)
+            })
+        })
+    }, [])
+
+    // 取消上传
+    const cancelUpload = useCallback((file: any) => {
+        const uid = file.uid || file.originFileObj?.uid || file
+        manager.cancelUpload(uid)
+    }, [])
+
     return {
+        cancelUpload,
         /** 完整的状态 Map { [uid]: state } */
         uploadMap,
         /** 开始上传函数 */
@@ -164,6 +202,8 @@ export const useUpload = () => {
         /** 获取单文件状态 helper */
         getFileState,
         /** 设置配置 helper */
-        setUploadConfig
+        setUploadConfig,
+        /** 预计算 Hash helper */
+        preCalculate
     }
 }

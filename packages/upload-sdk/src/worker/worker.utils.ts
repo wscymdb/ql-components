@@ -1,8 +1,17 @@
 import { createSHA256 } from "hash-wasm"
-import type { RequestOption, MainToWorkerMessage, HookContext, UploadConfig, WorkerMessage } from "../types"
+import type {
+    RequestOption,
+    MainToWorkerMessage,
+    HookContext,
+    UploadConfig,
+    WorkerMessage
+} from "../types"
 
 // 存储等待中的 Promise
-const pendingRequestMap = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>()
+const pendingRequestMap = new Map<
+    string,
+    { resolve: (val: any) => void; reject: (err: any) => void }
+>()
 
 /**
  * 1. 初始化 RPC 监听 (需在 Worker 顶部调用)
@@ -64,7 +73,8 @@ export const request = async (opt: RequestOption, token?: string) => {
         body: opt.body as BodyInit
     })
 
-    if (!response.ok) throw new Error(`请求失败 [${response.status}]: ${response.statusText}`)
+    if (!response.ok)
+        throw new Error(`请求失败 [${response.status}]: ${response.statusText}`)
     try {
         return await response.json()
     } catch {
@@ -121,27 +131,67 @@ export const requestWithValidate = async (
 /**
  * 计算 Hash
  */
-export const calculateFileHash = async (file: File): Promise<string> => {
+export const calculateFileHash = async (
+    file: File,
+    onProgress?: (percent: number) => void // 接收回调
+): Promise<string> => {
     const hasher = await createSHA256()
     const reader = new FileReader()
     const chunkSize = 10 * 1024 * 1024 // 10MB 切片
     const chunks = Math.ceil(file.size / chunkSize)
     let currentChunk = 0
 
-    return new Promise(resolve => {
+    // const triggerErrorAt = Math.floor(chunks / 2)
+
+    // 【性能优化】节流控制：记录上次发送时间
+    let lastNotifyTime = 0
+
+    return new Promise((resolve, reject) => {
         reader.onload = e => {
-            const bytes = new Uint8Array(e.target?.result as ArrayBuffer)
+            try {
+                // if (file.name.includes("Wrap")) {
+                //     // 让它先跑一会儿，模拟计算了一半崩了的效果
+                //     if (currentChunk > triggerErrorAt) {
+                //         throw new Error(
+                //             "模拟错误：文件特征值计算失败 (Simulated Error)"
+                //         )
+                //     }
+                // }
 
-            // 【关键】流式更新，算完这块扔这块，不占内存
-            hasher.update(bytes)
+                const bytes = new Uint8Array(e.target?.result as ArrayBuffer)
 
-            currentChunk++
-            if (currentChunk < chunks) {
-                loadNext()
-            } else {
-                // 结束，输出 hex
-                resolve(hasher.digest())
+                // 【关键】流式更新，算完这块扔这块，不占内存
+                hasher.update(bytes)
+
+                currentChunk++
+
+                // 计算并回调进度
+                if (onProgress) {
+                    const now = Date.now()
+                    // 每 100ms 或者已经最后一块了，才发送一次通知
+                    if (now - lastNotifyTime > 100 || currentChunk === chunks) {
+                        const percent = Number(
+                            ((currentChunk / chunks) * 100).toFixed(0)
+                        )
+                        onProgress(percent)
+                        lastNotifyTime = now
+                    }
+                }
+
+                if (currentChunk < chunks) {
+                    loadNext()
+                } else {
+                    // 结束，输出 hex
+                    resolve(hasher.digest())
+                }
+            } catch (error) {
+                reject(error)
             }
+        }
+
+        // 处理文件读取本身的 IO 错误
+        reader.onerror = () => {
+            reject(reader.error)
         }
 
         function loadNext() {
@@ -175,7 +225,10 @@ export const log = (showLog: boolean = false, message: string) => {
 export const resolveUrl = (baseUrl: string, relativePath: string) => {
     if (!baseUrl) return relativePath
     // 如果已经是绝对路径（http://...），直接返回
-    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
+    if (
+        relativePath.startsWith("http://") ||
+        relativePath.startsWith("https://")
+    ) {
         return relativePath
     }
     // 去除 baseUrl 尾部的 / 和 relativePath 头部的 /，防止双斜杠

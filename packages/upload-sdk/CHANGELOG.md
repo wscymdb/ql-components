@@ -1,5 +1,22 @@
 # @ql-react-components/upload-sdk
 
+## 0.4.0
+
+### Minor Changes
+
+#### ✨ Features (新特性)
+
+-   Pre-computation (预计算):
+    -   新增 preCalculate(files) 方法，允许在文件选择后立即开始计算 Hash。
+    -   智能复用: 如果 Hash 已预计算完成，调用 startUpload 时将直接跳过计算阶段，实现“秒传”体验。
+    -   无缝衔接: 支持在计算过程中随时点击上传，startUpload 会自动等待正在进行的计算任务完成，避免重复计算。
+    -   Hash Progress:
+        -   Hash 计算阶段（包括预计算和上传时计算）现在支持进度实时回调。
+        -   UI 状态新增 'calculating'，解决了大文件计算 Hash 时进度条卡在 0% 的“假死”现象。
+    -   支持取消上传任务
+        -   新增 cancelUpload 方法，允许在任何阶段（包括 Hash 计算和上传）中断上传任务。
+        -   取消操作会触发 startUpload 的 catch 块，方便业务层统一处理取消逻辑。
+
 ## 0.3.2
 
 ### Patch Changes

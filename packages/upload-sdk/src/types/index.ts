@@ -87,8 +87,13 @@ export interface UploadConfig {
     }
 }
 
-/** 发送给 Worker 的精简配置 (不含 hooks 函数) */
-export type WorkerConfig = Omit<UploadConfig, "hooks">
+/**
+ * 发送给 Worker 的精简配置 (不含 hooks 函数)
+ */
+export type WorkerConfig = Omit<UploadConfig, "hooks"> & {
+    /** 预计算的 Hash，如果存在，Worker 将跳过计算步骤 */
+    hash?: string
+}
 
 /**
  * ============================================================================
@@ -98,7 +103,13 @@ export type WorkerConfig = Omit<UploadConfig, "hooks">
 export interface SingleFileState {
     uid: string
     progress: number
-    status: "idle" | "uploading" | "done" | "error"
+    status:
+        | "idle"
+        | "calculating"
+        | "uploading"
+        | "done"
+        | "error"
+        | "cancelled"
     hash?: string
     errorMsg?: string
 }
@@ -139,12 +150,17 @@ export interface RPCResultPayload {
 /** Worker -> 主线程: 常规汇报 */
 export type WorkerReportMessage =
     | { type: "progress"; uid: string; percent: number }
+    | { type: "hash_progress"; uid: string; percent: number }
     | { type: "done"; uid: string; hash: string }
     | { type: "error"; uid: string; error: string }
+    | { type: "hash_result"; uid: string; hash: string } // 用于 preCalculate 的结果
     | { type: "log"; message: string }
 
 export type WorkerMessage = RPCCallPayload | WorkerReportMessage
-export type MainToWorkerMessage = WorkerInitPayload | RPCResultPayload
+export type MainToWorkerMessage =
+    | WorkerInitPayload
+    | RPCResultPayload
+    | { type: "cancel"; uid: string }
 
 export interface UploadSuccessResult {
     status: "success"
@@ -157,8 +173,17 @@ export interface UploadErrorResult {
     status: "error"
     uid: string
     file: File
-    error: any
+    error: Error
+}
+
+export interface UploadCancelledResult {
+    status: "cancelled"
+    uid: string
+    file: File
 }
 
 // 联合类型
-export type UploadResult = UploadSuccessResult | UploadErrorResult
+export type UploadResult =
+    | UploadSuccessResult
+    | UploadErrorResult
+    | UploadCancelledResult

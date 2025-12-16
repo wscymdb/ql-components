@@ -1,13 +1,13 @@
 {
     "name": "@ql-react-components/upload-sdk",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "description": "基于react的大文件上传sdk",
     "type": "module",
     "module": "es/index.js",
     "types": "es/index.d.ts",
     "scripts": {
-        "dev": "tsup --watch",
-        "build": "tsup"
+        "dev": "NODE_ENV=development tsup --watch",
+        "build": "NODE_ENV=production tsup"
     },
     "files": [
         "es",

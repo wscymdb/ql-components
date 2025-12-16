@@ -13,17 +13,63 @@ import type {
 } from "../types"
 import { formatError } from "../utils"
 
-// 1. 启动 RPC 监听
+// 启动 RPC 监听
 initRPCListener()
+
+// 封装发送进度的函数
+const sendHashProgress = (uid: string, percent: number) => {
+    self.postMessage({ type: "hash_progress", uid, percent })
+}
+
+// 【新增】存储被取消的 UID
+const cancelledUIDs = new Set<string>()
 
 /**
  * Worker 主逻辑
  */
 self.onmessage = async (e: MessageEvent<any>) => {
+    // 处理取消指令
+    if (e.data.type === "cancel") {
+        const { uid } = e.data
+        cancelledUIDs.add(uid) // 加入黑名单
+        return
+    }
+
+    // 处理纯计算指令
+    if (e.data.type === "only_hash") {
+        try {
+            const { file, uid } = e.data
+            // 复用现有的计算逻辑
+            const hash = await calculateFileHash(file, percent => {
+                // 每次回调都检查一下是否被取消
+                if (cancelledUIDs.has(uid)) {
+                    throw new Error("TaskCanceled") // 抛错中断读取流
+                }
+                sendHashProgress(uid, percent)
+            })
+            self.postMessage({ type: "hash_result", hash })
+        } catch (error) {
+            // 【核心修复】捕获取消错误，静默退出
+            if (error instanceof Error && error.message === "TaskCanceled") {
+                return // 静默退出，不报错
+            }
+
+            self.postMessage({
+                type: "error",
+                error: formatError(error)
+            })
+        }
+        return
+    }
+
     // 只处理 init 任务，hook_result 由 initRPCListener 处理
     if (e.data.type !== "init") return
 
     const { file, uid, config } = e.data as WorkerInitPayload
+
+    // 新任务开始时，确保把它从黑名单移除
+    cancelledUIDs.delete(uid)
+
     const {
         serverUrl,
         chunkSize = 5 * 1024 * 1024,
@@ -83,9 +129,23 @@ self.onmessage = async (e: MessageEvent<any>) => {
         // 1. 纯数学计算，瞬间完成
         const totalChunks = Math.ceil(file.size / chunkSize)
 
-        // --- 2. Hash ---
-        log(showLog, `[${uid}] Calculating Hash...`)
-        const hash = await calculateFileHash(file)
+        // --- 2. Hash --- （如果有预计算 Hash，直接使用；否则计算）
+        let hash = config.hash
+
+        if (!hash) {
+            log(showLog, `[${uid}] Calculating Hash...`)
+            hash = await calculateFileHash(file, percent => {
+                // 如果是在主 Worker 里算 Hash，必须在这里手动检查取消状态
+                if (cancelledUIDs.has(uid)) {
+                    throw new Error("TaskCanceled") // 打断 calculateFileHash 内部的循环
+                }
+                sendHashProgress(uid, percent)
+            })
+        }
+
+        // Hash算完检查一下是否取消
+        if (cancelledUIDs.has(uid)) throw new Error("TaskCanceled")
+
         log(showLog, `[${uid}] Hash: ${hash}`)
 
         const suffix = file.name.split(".").pop() || "tmp"
@@ -96,6 +156,9 @@ self.onmessage = async (e: MessageEvent<any>) => {
             chunkSize: chunkSize,
             hash
         })
+
+        // Init完检查一下
+        if (cancelledUIDs.has(uid)) throw new Error("TaskCanceled")
 
         // --- 4. 切片 ---
         const chunksList: ChunkItem[] = []
@@ -136,6 +199,8 @@ self.onmessage = async (e: MessageEvent<any>) => {
                 // 注意：通常 check 失败降级为全量上传，不需要阻断
             }
         }
+        // 【新增检查】Check完检查一下
+        if (cancelledUIDs.has(uid)) throw new Error("TaskCanceled")
 
         // --- 6. Upload (重点) ---
         const chunksToDo = chunksList.filter(
@@ -153,6 +218,10 @@ self.onmessage = async (e: MessageEvent<any>) => {
             const pool = new Set<Promise<any>>()
 
             for (const chunkItem of chunksToDo) {
+                if (cancelledUIDs.has(uid)) {
+                    throw new Error("TaskCanceled")
+                }
+
                 const ctx = {
                     hash,
                     chunk: chunkItem.file,
@@ -221,6 +290,9 @@ self.onmessage = async (e: MessageEvent<any>) => {
         }
 
         // --- 7. Merge ---
+        // 合并前最后检查一次
+        if (cancelledUIDs.has(uid)) throw new Error("TaskCanceled")
+
         const ctx = {
             hash,
             count: totalChunks,
@@ -237,6 +309,11 @@ self.onmessage = async (e: MessageEvent<any>) => {
 
         self.postMessage({ type: "done", uid, hash } as WorkerMessage)
     } catch (error) {
+        // 如果是取消导致的错误，静默处理，不报错给主线程
+        if (error instanceof Error && error.message === "TaskCanceled") {
+            return // 静默退出，不报错
+        }
+
         self.postMessage({
             type: "error",
             uid,

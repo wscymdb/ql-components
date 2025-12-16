@@ -69,6 +69,14 @@ pnpm add @ql-react-components/upload-sdk
 
 <embed src="../../components/UploadSdk/ErrorDispose/index.md"></embed>
 
+<!-- 预计算 Hash -->
+
+<embed src="../../components/UploadSdk/PreCalculate/index.md"></embed>
+
+<!-- 取消上传 -->
+
+<embed src="../../components/UploadSdk/CancelUpload/index.md"></embed>
+
 <!-- API 接口 -->
 
 <embed src="../../components/UploadSdk/API/index.md"></embed>
