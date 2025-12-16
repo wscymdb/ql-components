@@ -7,21 +7,33 @@
 React 核心 Hook，用于获取上传状态和控制方法。
 
 ```tsx | pure
-const { startUpload, setUploadConfig, uploadMap } = useUpload()
+const {
+    startUpload,
+    setUploadConfig,
+    uploadMap,
+    preCalculate,
+    cancelUpload,
+    removeFile,
+    reset
+} = useUpload()
 ```
 
 #### 返回值
 
-| 属性              | 说明                                                                            | 类型                                                                 |
-| :---------------- | :------------------------------------------------------------------------------ | :------------------------------------------------------------------- |
-| `startUpload`     | 触发上传的核心方法。支持多文件并发，返回 Promise，需通过 `try/catch` 捕获结果。 | `(files: File[], options?: UploadConfig) => Promise<UploadResult[]>` |
-| `setUploadConfig` | 全局设置 SDK 配置（单例模式，全局生效）。                                       | `(config: UploadConfig) => void`                                     |
-| `uploadMap`       | 当前所有文件的上传状态快照。Key 为文件 `uid`。                                  | `Record<string, SingleFileState>`                                    |
-| `getFileState`    | 获取指定 UID 文件的状态（安全访问，若不存在返回默认空状态）。                   | `(uid: string) => SingleFileState`                                   |
+| 属性              | 说明                                                                              | 类型                                                                 |
+| :---------------- | :-------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
+| `startUpload`     | 触发上传的核心方法。支持多文件并发，返回 Promise，需通过 `try/catch` 捕获结果。   | `(files: File[], options?: UploadConfig) => Promise<UploadResult[]>` |
+| `preCalculate`    | 提前触发 Hash 计算。计算完成后状态变为 `ready`，再次调用 startUpload 可秒进上传。 | `(files: File[]) => void`                                            |
+| `cancelUpload`    | 取消上传或计算任务。文件状态变为 `cancelled`，保留在列表中，可重试。              | `(fileOrUid: File \| string) => void`                                |
+| `removeFile`      | 取消任务并从 `uploadMap` 中彻底移除文件记录。                                     | `(fileOrUid: File \| string) => void`                                |
+| `reset`           | 重置 SDK。终止所有任务，清空所有状态。常用于关闭弹窗时清理资源。                  | `() => void`                                                         |
+| `setUploadConfig` | 全局设置 SDK 配置（单例模式，全局生效）。                                         | `(config: UploadConfig) => void`                                     |
+| `uploadMap`       | 当前所有文件的上传状态快照。Key 为文件 `uid`。                                    | `Record<string, SingleFileState>`                                    |
+| `getFileState`    | 获取指定 UID 文件的状态（安全访问，若不存在返回默认空状态）。                     | `(uid: string) => SingleFileState`                                   |
 
 ### UploadConfig
 
-全局配置对象，用于 `setUploadConfig` 或 `startUpload` 的第二个参数。
+全局配置对象，用于 `setUploadConfig`
 
 | 属性                 | 说明                                                                        | 类型          | 是否必填 | 默认值                                               |
 | :------------------- | :-------------------------------------------------------------------------- | :------------ | :------- | :--------------------------------------------------- |
@@ -29,7 +41,6 @@ const { startUpload, setUploadConfig, uploadMap } = useUpload()
 | `apiPaths`           | 自定义各阶段的接口路径。                                                    | `ApiPaths`    | 否       | `{upload: '/upload_chunk', merge: '/upload_merge' }` |
 | `concurrency`        | 并发上传的切片数量。不建议设置过大，以免阻塞浏览器。                        | `number`      | 否       | `3`                                                  |
 | `chunkSize`          | 单个切片的大小（字节）。                                                    | `number`      | 否       | `5 * 1024 * 1024` (5MB)                              |
-| `checkEnabled`       | 是否开启秒传/断点续传检查。                                                 | `boolean`     | 否       | `true`                                               |
 | `preventWindowClose` | 上传过程中是否拦截浏览器关闭/刷新。                                         | `boolean`     | 否       | `true`                                               |
 | `token`              | 如果需要，SDK 会自动将其添加到请求头的 `Authorization: Bearer {token}` 中。 | `string`      | 否       | -                                                    |
 | `hooks`              | 生命周期钩子函数集合。                                                      | `UploadHooks` | 否       | -                                                    |
@@ -88,13 +99,14 @@ interface ApiPaths {
 
 `uploadMap` 中每个文件的状态对象。
 
-| 属性       | 说明                                                                        | 类型                                         |
-| :--------- | :-------------------------------------------------------------------------- | :------------------------------------------- |
-| `uid`      | 文件唯一标识                                                                | `string`                                     |
-| `status`   | 当前状态                                                                    | `'idle' \| 'uploading' \| 'done' \| 'error'` |
-| `progress` | 进度百分比 (0-100)，这里的进度是纯前端的进度，公式：`总切片数/成功的切片数` | `number`                                     |
-| `hash`     | 文件 Hash (完成或计算后存在)                                                | `string`                                     |
-| `errorMsg` | 错误信息 (状态为 error 时存在)                                              | `string`                                     |
+| 属性       | 说明                                                                                  | 类型                                                                                                  |
+| :--------- | :------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------- |
+| `uid`      | 文件唯一标识                                                                          | `string`                                                                                              |
+| `name`     | 文件名                                                                                | `string`                                                                                              |
+| `status`   | 当前状态                                                                              | `'idle' \| 'calculating' \| 'ready' \| 'checking' \| 'uploading' \| 'done' \| 'error' \| 'cancelled'` |
+| `progress` | 进度百分比 (0-100)。在 calculating 状态下代表计算进度，uploading 状态下代表上传进度。 | `number`                                                                                              |
+| `hash`     | 文件 Hash (status 为 ready, checking, uploading, done 时存在)                         | `string`                                                                                              |
+| `errorMsg` | 错误信息 (状态为 error 时存在)                                                        | `string`                                                                                              |
 
 #### UploadBatchError
 
@@ -124,5 +136,12 @@ type UploadResult =
           uid: string
           file: File
           error: Error
+      }
+    // 取消状态
+    | {
+          status: "cancelled"
+          uid: string
+          file: File
+          error?: Error
       }
 ```

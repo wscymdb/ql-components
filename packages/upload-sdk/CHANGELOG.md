@@ -1,5 +1,23 @@
 # @ql-react-components/upload-sdk
 
+## 0.6.0
+
+### Minor Changes
+
+-   sdk 新增 removeFile 方法 用于删除正在上传的任务
+
+## 0.5.0
+
+### Minor Changes
+
+-   添加 reset 方法 重置状态
+
+## 0.4.1
+
+### Patch Changes
+
+-   修复 status 错乱问题 uploadMap 返回文件名
+
 ## 0.4.0
 
 ### Minor Changes

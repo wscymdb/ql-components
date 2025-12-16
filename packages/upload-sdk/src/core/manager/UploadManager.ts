@@ -290,7 +290,12 @@ export class UploadManager {
 
         // 2. 更新状态为 calculating
         // 注意：这里我们只更新状态，不注册到 fileRegistry，因为这是纯计算任务
-        this.updateFileState(uid, { uid, status: "calculating", progress: 0 })
+        this.updateFileState(uid, {
+            uid,
+            name: rawFile.name,
+            status: "calculating",
+            progress: 0
+        })
 
         const task = new Promise<string>((resolve, reject) => {
             // 创建一个新的临时 Worker，用完即焚
@@ -316,7 +321,7 @@ export class UploadManager {
 
                     case "hash_result":
                         this.updateFileState(uid, {
-                            status: "idle",
+                            status: "ready",
                             hash: msg.hash,
                             progress: 100
                         })
@@ -366,102 +371,216 @@ export class UploadManager {
     }
 
     /**
-     * 【重写】cancelUpload
+     * 取消上传/计算
+     * 作用：停止 Worker，断开 Promise，将状态设为 'cancelled'
+     * 后果：文件依然在 uploadMap 中，只是状态变了
      */
     public cancelUpload(uid: string) {
-        // 1. 加入忽略名单 (立即生效，挡住 Worker 的后续消息)
+        // 1. 屏蔽消息
         this.ignoringUIDs.add(uid)
 
-        // 2. 终止临时 Worker (预计算阶段)
+        // 2. 终止临时 Worker (预计算)
         if (this.tempWorkerMap.has(uid)) {
             this.tempWorkerMap.get(uid)?.terminate()
             this.tempWorkerMap.delete(uid)
             this.pendingHashTasks.delete(uid)
         }
 
-        // 3. 通知主 Worker (上传阶段)
+        // 3. 通知主 Worker (上传中)
         if (this.worker) {
             this.worker.postMessage({ type: "cancel", uid })
         }
 
-        // 4. 结算 Promise (Reject 一个特定的对象)
+        // 4. Reject Promise
         const promiseHandler = this.promiseMap.get(uid)
         if (promiseHandler) {
-            // 注意：这里我们 reject 一个带 status='cancelled' 的对象
-            // 这样 await startUpload 的 catch 里就能判断出来
             promiseHandler.reject({
-                status: "cancelled", // <--- 关键
+                status: "cancelled",
                 uid,
                 file: this.fileRegistry.get(uid)!,
                 error: new Error("Task Canceled")
-            } as any) // 强转一下，或者修改 PromiseMap 的类型定义
+            } as any)
             this.promiseMap.delete(uid)
         }
 
-        // 5. 清理资源
+        // 5. 资源清理
         this.cleanup(uid)
 
-        // 6. 更新 UI 状态为归零/取消
-        this.updateFileState(uid, { status: "idle", progress: 0 })
-        // 或者: this.updateFileState(uid, { status: "cancelled", progress: 0 })
+        // 6. 【关键】只更新状态，不删除！
+        this.updateFileState(uid, { status: "cancelled", progress: 0 })
     }
 
     /**
-     * startUpload
+     * 移除文件
+     * 作用：先执行取消操作（防止后台还在跑），然后从 uploadMap 中彻底删除
+     */
+    public removeFile(uid: string) {
+        // 1. 为了安全，先调用 cancel，确保后台 Worker 停掉
+        // (cancelUpload 内部有防抖判断，重复调用没问题的，或者你可以判断下状态)
+        this.cancelUpload(uid)
+
+        // 2. 从 State 中物理删除
+        const newState = { ...this.state }
+        delete newState[uid]
+        this.state = newState
+
+        // 3. 通知 UI 更新
+        this.listeners.forEach(l => l(this.state))
+    }
+    /**
+     * 【新增】全局重置/清空方法
+     * 用于关闭弹窗时彻底清理所有状态和后台任务
+     */
+    public reset() {
+        // 1. 获取当前所有任务 ID
+        const allUids = Object.keys(this.state)
+
+        // 2. 终止所有正在运行的任务
+        allUids.forEach(uid => {
+            // A. 终止临时 Hash Worker (物理查杀)
+            if (this.tempWorkerMap.has(uid)) {
+                this.tempWorkerMap.get(uid)?.terminate()
+            }
+
+            // B. 拒绝所有正在等待的 Promise (防止 await 悬挂)
+            const promiseHandler = this.promiseMap.get(uid)
+            if (promiseHandler) {
+                promiseHandler.reject({
+                    status: "cancelled",
+                    uid,
+                    file: this.fileRegistry.get(uid)!, // 可能为 undefined，强转一下或者加判断
+                    error: new Error("Reset")
+                } as any)
+            }
+        })
+
+        // 3. 通知主 Worker 取消所有任务 (如果有的话)
+        // 既然是 Reset，我们可以简单地发一个 reset 指令，或者循环 cancel
+        // 这里为了简单，我们假设主 Worker 还在跑，我们直接发指令让它停掉手头的活
+        if (this.worker) {
+            allUids.forEach(uid => {
+                this.worker!.postMessage({ type: "cancel", uid })
+            })
+            // 或者：直接 terminate 主 Worker 重启一个？
+            // 不建议 terminate 主 Worker，因为重建开销大，且 Worker 是无状态的，cancel 足够了
+        }
+
+        // 4. 【核心】暴力清空所有数据结构
+        this.tempWorkerMap.clear()
+        this.pendingHashTasks.clear()
+        this.promiseMap.clear()
+        this.fileRegistry.clear()
+        this.ignoringUIDs.clear()
+        // this.taskHandlers.clear() // 如果你还没删的话
+
+        // 5. 【核心】重置状态为空对象
+        this.state = {}
+
+        // 6. 通知 UI 更新 (UI 会变为空白)
+        this.listeners.forEach(l => l(this.state))
+    }
+
+    /**
+     * 启动上传核心方法
+     *
+     * @description
+     * 1. 支持异步 await 调用，阻塞直到上传完成/失败/取消
+     * 2. 智能状态流转：
+     *    - 如果已预计算完成 (Ready) -> 状态变为 'checking' (连接服务器中)
+     *    - 如果正在预计算 (Calculating) -> 保持进度，等待计算完成
+     *    - 如果是新任务 -> 状态变为 'calculating' (从头计算)
+     * 3. 自动复用正在进行的 Hash 计算任务，避免重复计算
+     *
+     * @param file - 上传的文件对象 (原生 File 或 Antd 包装对象)
+     * @param customOptions - 本次任务专用的配置 (如 API 路径、Hooks)
+     * @returns Promise<UploadSuccessResult> - 成功返回结果，失败/取消抛出异常
      */
     public async startUpload(
         file: any,
         customOptions?: Partial<UploadConfig>
     ): Promise<UploadSuccessResult> {
+        // 1. 提取原始文件对象和 UID
         const rawFile = file.originFileObj ? file.originFileObj : file
         const uid = rawFile.uid || `${Date.now()}`
 
-        // 【新增】开始新任务前，确保移出忽略名单
+        // 2. 【关键修复】移出忽略名单
+        // 如果该文件之前被取消过，UID 会在忽略名单里。
+        // 这里必须移除，否则新启动的任务发来的 Worker 消息会被 Manager 丢弃，导致进度条不动。
         this.ignoringUIDs.delete(uid)
 
-        // 1. 获取当前状态
+        // 3. 注册文件引用 (供 RPC 钩子读取)
+        this.fileRegistry.set(uid, rawFile)
+
+        // ============================================================
+        // 4. 智能初始化状态 (解决进度闪烁/回跳问题)
+        // ============================================================
         const currentState = this.state[uid]
 
-        // 2. 判断是否应该继承进度
-        // 如果当前状态是 'calculating' (说明 preCalculate 正在跑)
-        // 或者已经有 hash (说明算完了)，就保持当前进度，不要归零
-        const initialProgress =
-            currentState?.status === "calculating" || currentState?.hash
-                ? currentState.progress
-                : 0
+        // 判断依据：
+        // ready: 表示 Hash 已经算好，下一步就是发请求
+        // calculating: 表示正在预计算中
+        const isReady = currentState?.status === "ready"
+        const isCalculating = currentState?.status === "calculating"
 
-        // 1. 基础状态设置 (同步)
-        this.fileRegistry.set(uid, rawFile)
+        // 决定初始状态：
+        // - 如果 Ready -> 设为 'checking' (表示正在进行 Init/Check 阶段，连接服务器)
+        // - 否则 -> 设为 'calculating' (表示需要计算 Hash)
+        const initialStatus = isReady ? "checking" : "calculating"
+
+        // 决定初始进度：
+        // - 如果 Ready -> 归 0 (准备开始上传流程)
+        // - 如果正在算 -> 继承当前进度 (比如 50%)，防止 UI 闪回 0
+        const initialProgress = isReady
+            ? 0
+            : isCalculating
+            ? currentState?.progress || 0
+            : 0
+
+        // 更新 UI
         this.updateFileState(uid, {
             uid,
-            status: "calculating",
+            name: rawFile.name,
+            status: initialStatus,
             progress: initialProgress
         })
 
+        // ============================================================
+        // 5. 配置与路径处理
+        // ============================================================
+
+        // 应用临时配置
         if (customOptions) this.setConfig(customOptions)
 
+        // 处理 serverUrl 相对路径 (适配开发环境 Proxy)
+        // 将 "/api" 转换为 "http://localhost:3000/api"
         let finalServerUrl = this.config.serverUrl
         if (finalServerUrl && !finalServerUrl.startsWith("http")) {
             finalServerUrl = new URL(finalServerUrl, window.location.origin)
                 .href
         }
 
-        // 2. 【核心修复】先处理 await 逻辑 (解耦 async 和 new Promise)
+        // ============================================================
+        // 6. 等待 Hash 策略 (解决重复计算问题)
+        // ============================================================
+
+        // 尝试获取已有的 Hash
         let preCalculatedHash = this.state[uid]?.hash
 
-        // 如果没有 Hash，且发现有正在计算的任务，先等待
+        // 如果没有 Hash，但发现有一个正在计算的任务 (preCalculate 正在跑)
         if (!preCalculatedHash && this.pendingHashTasks.has(uid)) {
             try {
-                // 等待预计算完成
+                // 【核心】在这里“搭便车”，等待预计算 Worker 完成
+                // 此时 UI 进度条由那个临时 Worker 驱动
                 preCalculatedHash = await this.pendingHashTasks.get(uid)
             } catch (err) {
-                // 如果预计算失败了，直接抛出错误，终止上传流程
+                // 如果预计算挂了 (比如文件读取失败)，直接终止本次上传
                 this.cleanup(uid)
                 this.updateFileState(uid, {
                     status: "error",
                     errorMsg: "Pre-calculation Failed"
                 })
-                // 抛出错误给外层的 Promise.allSettled
+
+                // 抛出错误，让外层 await startUpload 捕获
                 throw {
                     status: "error",
                     uid,
@@ -471,14 +590,19 @@ export class UploadManager {
             }
         }
 
-        // 3. 返回由 Worker 驱动的 Promise
+        // ============================================================
+        // 7. 启动主流程 (返回 Promise)
+        // ============================================================
+
         return new Promise<UploadSuccessResult>((resolve, reject) => {
-            // 注册 resolve/reject 句柄，等待 Worker 的 done/error 消息来触发
+            // 注册 Promise 句柄，等待 Worker 发回 'done' 或 'error' 消息
+            // 这里的 resolve/reject 会在 onmessage 中被调用
             this.promiseMap.set(uid, { resolve, reject })
 
-            // 启动 Main Worker
+            // 获取或创建主 Worker
             const worker = this.initWorker()
 
+            // 构造初始化 Payload
             const payload: WorkerInitPayload = {
                 type: "init",
                 uid,
@@ -488,15 +612,17 @@ export class UploadManager {
                     chunkSize: this.config.chunkSize,
                     concurrency: this.config.concurrency,
                     token: this.config.token,
-                    checkEnabled: this.config.checkEnabled,
+                    // checkEnabled: this.config.checkEnabled, // 暂不支持
                     apiPaths: this.config.apiPaths,
                     showLog: this.config.showLog,
 
-                    // 此时这里可能有值 (预计算成功)，也可能没值 (没预计算，由 Worker 自己算)
+                    // 【关键】将 Hash 传给 Worker
+                    // Worker 收到这个值后，会直接跳过内部的计算步骤，直接进入 Upload
                     hash: preCalculatedHash
                 }
             }
 
+            // 发送指令
             worker.postMessage(payload)
         })
     }

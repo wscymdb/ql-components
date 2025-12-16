@@ -103,9 +103,12 @@ export type WorkerConfig = Omit<UploadConfig, "hooks"> & {
 export interface SingleFileState {
     uid: string
     progress: number
+    name: string
     status:
         | "idle"
         | "calculating"
+        | "ready"
+        | "checking"
         | "uploading"
         | "done"
         | "error"

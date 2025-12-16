@@ -188,12 +188,42 @@ export const useUpload = () => {
     }, [])
 
     // 取消上传
-    const cancelUpload = useCallback((file: any) => {
-        const uid = file.uid || file.originFileObj?.uid || file
+    const cancelUpload = useCallback((fileOrUid: any) => {
+        const uid =
+            typeof fileOrUid === "string"
+                ? fileOrUid
+                : fileOrUid.uid || fileOrUid.originFileObj?.uid
+
+        if (!uid) {
+            console.error("缺少 uid", fileOrUid)
+            return
+        }
+
         manager.cancelUpload(uid)
     }, [])
 
+    // 重置上传状态
+    const reset = useCallback(() => {
+        manager.reset()
+    }, [])
+
+    const removeFile = useCallback((fileOrUid: any) => {
+        const uid =
+            typeof fileOrUid === "string"
+                ? fileOrUid
+                : fileOrUid.uid || fileOrUid.originFileObj?.uid
+
+        if (!uid) {
+            console.error("缺少 uid", fileOrUid)
+            return
+        }
+
+        manager.removeFile(uid)
+    }, [])
+
     return {
+        removeFile,
+        reset,
         cancelUpload,
         /** 完整的状态 Map { [uid]: state } */
         uploadMap,

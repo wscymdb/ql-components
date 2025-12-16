@@ -10,19 +10,25 @@ import {
 } from "antd"
 import { useEffect, useState, useMemo } from "react"
 import { useUpload, UploadBatchError } from "@ql-react-components/upload-sdk"
-import {
-    UploadOutlined,
-    FileOutlined,
-    CloseCircleOutlined
-} from "@ant-design/icons"
+import { UploadOutlined, FileOutlined } from "@ant-design/icons"
 import type { UploadFile } from "antd/es/upload/interface"
 
 const BigFileUpload = () => {
-    const { uploadMap, setUploadConfig, preCalculate, startUpload } =
-        useUpload()
+    const {
+        uploadMap,
+        removeFile,
+        reset,
+        setUploadConfig,
+        preCalculate,
+        startUpload
+    } = useUpload()
 
     // 使用 useState 代替 useRef，确保 fileList 变化时触发重新渲染
     const [fileList, setFileList] = useState<UploadFile[]>([])
+
+    useEffect(() => {
+        console.log(uploadMap)
+    }, [uploadMap])
 
     useEffect(() => {
         setUploadConfig({
@@ -96,80 +102,44 @@ const BigFileUpload = () => {
                 >
                     {isProcessing ? "处理中..." : "开始切片上传"}
                 </Button>
+                <Button onClick={reset}>重置上传状态</Button>
             </div>
 
             <Flex vertical style={{ gap: 12 }}>
-                {Object.values(uploadMap).map(item => (
-                    <Card key={item.uid} size="small">
-                        <div
-                            style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                marginBottom: 6
-                            }}
-                        >
-                            <div style={{ fontWeight: "bold" }}>
-                                <FileOutlined /> 文件ID: {item.uid}
-                            </div>
-                            <div style={{ fontSize: 12 }}>
-                                {item.status === "calculating" && (
-                                    <span style={{ color: "#faad14" }}>
-                                        🔍 特征计算中...
-                                    </span>
-                                )}
-                                {item.status === "uploading" && (
-                                    <span style={{ color: "#1890ff" }}>
-                                        🚀 上传中...
-                                    </span>
-                                )}
-                                {item.status === "done" && (
-                                    <span style={{ color: "#52c41a" }}>
-                                        ✅ 完成
-                                    </span>
-                                )}
-                                {item.status === "error" && (
-                                    <span style={{ color: "#ff4d4f" }}>
-                                        ❌ 失败
-                                    </span>
-                                )}
-                            </div>
-                        </div>
+                {Object.values(uploadMap).map(item => {
+                    if (item.status !== "calculating") return
 
-                        <Progress
-                            percent={item.progress}
-                            status={
-                                item.status === "error"
-                                    ? "exception"
-                                    : item.status === "done"
-                                    ? "success"
-                                    : "active"
-                            }
-                            strokeColor={
-                                item.status === "calculating"
-                                    ? "#faad14"
-                                    : undefined
-                            }
-                        />
-
-                        {/* 重点：展示错误原因 */}
-                        {item.status === "error" && (
+                    return (
+                        <Card key={item.uid} size="small">
                             <div
                                 style={{
-                                    color: "#ff4d4f",
-                                    fontSize: 12,
-                                    marginTop: 6,
                                     display: "flex",
-                                    alignItems: "center"
+                                    justifyContent: "space-between",
+                                    marginBottom: 6
                                 }}
                             >
-                                <CloseCircleOutlined
-                                    style={{ marginRight: 4 }}
-                                />
-                                失败原因: {item.errorMsg || "未知错误"}
+                                <div style={{ fontWeight: "bold" }}>
+                                    <FileOutlined /> 文件ID: {item.uid}
+                                </div>
+                                <div style={{ fontWeight: "bold" }}>
+                                    <FileOutlined /> 文件名: {item.name}
+                                </div>
+                                <div style={{ fontSize: 12 }}>
+                                    {item.status === "calculating" && (
+                                        <span style={{ color: "#faad14" }}>
+                                            🔍 特征计算中...
+                                        </span>
+                                    )}
+                                </div>
+                                <Button onClick={() => removeFile(item.uid)}>
+                                    x
+                                </Button>
                             </div>
-                        )}
-                    </Card>
-                ))}
+
+                            <Progress percent={item.progress} />
+                        </Card>
+                    )
+                })}
             </Flex>
         </div>
     )
