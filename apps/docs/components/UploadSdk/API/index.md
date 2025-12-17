@@ -7,15 +7,7 @@
 React 核心 Hook，用于获取上传状态和控制方法。
 
 ```tsx | pure
-const {
-    startUpload,
-    setUploadConfig,
-    uploadMap,
-    preCalculate,
-    cancelUpload,
-    removeFile,
-    reset
-} = useUpload()
+const { startUpload, setUploadConfig, uploadMap, preCalculate, cancelUpload, removeFile, reset } = useUpload()
 ```
 
 #### 返回值
@@ -60,7 +52,7 @@ interface ApiPaths {
 
 | 钩子名称           | 说明                                                                                                      | 类型                                                            |
 | :----------------- | :-------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------- |
-| `init`             | **初始化阶段**。在 Hash 计算完成后执行。请求完全由主线程控制，**请在此函数内部自行校验结果**。            | `(ctx: HookContext) => Promise<any> \| any`                     |
+| `init`             | **初始化阶段**。在 Hash 计算完成后执行。请求完全由主线程控制，**请在此函数内部自行校验结果**              | `(ctx: HookContext) => Promise<any> \| any`                     |
 | `validateResponse` | **响应校验**。仅在 Worker 发起的请求阶段 (**Upload / Merge**) 触发。用于拦截业务错误（如 `code !== 0`）。 | `(ctx: HookContext) => void`                                    |
 | `upload`           | **切片上传**。返回切片上传请求的配置。                                                                    | `(ctx: HookContext) => Promise<RequestOption> \| RequestOption` |
 | `merge`            | **合并文件**。返回合并请求的配置。                                                                        | `(ctx: HookContext) => Promise<RequestOption> \| RequestOption` |
@@ -69,17 +61,19 @@ interface ApiPaths {
 
 传递给所有 Hook 的上下文对象。
 
-| 属性        | 说明                      | 类型                             | 备注                           |
-| :---------- | :------------------------ | :------------------------------- | :----------------------------- |
-| `file`      | 原始文件对象              | `File`                           | -                              |
-| `filename`  | 文件名                    | `string`                         | -                              |
-| `hash`      | 文件 Hash 值              | `string`                         | SHA-256                        |
-| `count`     | 总切片数量                | `number`                         | -                              |
-| `chunkSize` | 切片大小                  | `number`                         | -                              |
-| `initData`  | `init` 钩子的返回值       | `any`                            | 仅在后续阶段可用               |
-| `index`     | 当前切片索引（从 1 开始） | `number`                         | 仅 `upload` 阶段可用           |
-| `response`  | 后端接口返回的原始数据    | `any`                            | 仅 `validateResponse` 阶段可用 |
-| `hookName`  | 当前触发的阶段名称        | `'check' \| 'upload' \| 'merge'` | 仅 `validateResponse` 阶段可用 |
+| 属性        | 说明                                           | 类型                                    | 备注                           |
+| :---------- | :--------------------------------------------- | :-------------------------------------- | :----------------------------- |
+| `file`      | 原始文件对象                                   | `File`                                  | -                              |
+| `filename`  | 文件名                                         | `string`                                | -                              |
+| `hash`      | 文件 Hash 值                                   | `string`                                | SHA-256                        |
+| `count`     | 总切片数量                                     | `number`                                | -                              |
+| `chunkSize` | 切片大小                                       | `number`                                | -                              |
+| `initData`  | `init` 钩子的返回值                            | `any`                                   | 仅在后续阶段可用               |
+| `index`     | 当前切片索引（从 1 开始）                      | `number`                                | 仅 `upload` 阶段可用           |
+| `response`  | 后端接口返回的原始数据                         | `any`                                   | 仅 `validateResponse` 阶段可用 |
+| `hookName`  | 当前触发的阶段名称                             | `'check' \| 'upload' \| 'merge'`        | 仅 `validateResponse` 阶段可用 |
+| `success`   | <Badge>方法</Badge> 立即结束任务并标记为成功。 | `(data?: any) => never`                 | -                              |
+| `fail`      | <Badge>方法</Badge> 立即中断任务并标记为失败。 | `(msg: string, code?: string) => never` | -                              |
 
 #### RequestOption
 
@@ -144,4 +138,39 @@ type UploadResult =
           file: File
           error?: Error
       }
+```
+
+### 辅助函数 (Utils)
+
+SDK 导出的实用工具函数。
+
+```tsx | pure
+import { finish } from "@ql-react-components/upload-sdk"
+```
+
+#### finish
+
+用于在 `init` 钩子中通知 SDK **提前结束任务**（通常用于实现“秒传”逻辑）。
+
+| 参数   | 说明                                                                                                        | 类型  |
+| :----- | :---------------------------------------------------------------------------------------------------------- | :---- |
+| `data` | (可选) 透传给完成状态的数据。可以在 `startUpload` 返回的 `UploadResult` 或 `uploadMap` 状态中获取到该数据。 | `any` |
+
+**使用示例：**
+
+```typescript
+hooks: {
+    init: async ctx => {
+        const res = await checkFileExist(ctx.hash)
+
+        // 如果后端说文件已存在
+        if (res.data.isExist) {
+            // 调用 finish，跳过后续上传，直接成功
+            return finish(res.data)
+        }
+
+        // 正常流程
+        return res.data.uploadId
+    }
+}
 ```

@@ -1,2 +1,2 @@
 export * from "./formatError"
-export * from "./UploadBatchError"
+export * from "./enhanceError"

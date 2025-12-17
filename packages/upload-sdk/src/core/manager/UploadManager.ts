@@ -30,6 +30,14 @@ const DEFAULT_CONFIG: UploadConfig = {
     }
 }
 
+// 定义内部控制流异常 (不需要导出)
+class FlowControlException {
+    constructor(
+        public type: "success" | "fail",
+        public payload: any
+    ) {}
+}
+
 export class UploadManager {
     private static instance: UploadManager
     private worker: Worker | null = null
@@ -67,9 +75,7 @@ export class UploadManager {
     private constructor() {
         window.addEventListener("beforeunload", e => {
             if (!this.config.preventWindowClose) return
-            const isUploading = Object.values(this.state).some(
-                item => item.status === "uploading"
-            )
+            const isUploading = Object.values(this.state).some(item => item.status === "uploading")
             if (isUploading) e.preventDefault()
         })
     }
@@ -130,13 +136,12 @@ export class UploadManager {
                         })
                         break
                     case "done":
-                        this.handleDone(uid, msg.hash)
+                        this.handleDone(uid, msg.hash, msg.data)
 
                         break
                     case "error":
                         this.handleError(uid, msg.error)
 
-                        console.error(`上传失败 [${uid}]:`, msg.error)
                         break
                 }
             }
@@ -161,7 +166,7 @@ export class UploadManager {
         // 因为 UI 还需要展示 "Done" 状态和 100% 进度条
     }
 
-    private handleDone(uid: string, hash: string) {
+    private handleDone(uid: string, hash: string, data?: any) {
         // 获取当前任务的 Promise 句柄 和 原始文件
         const promiseHandler = this.promiseMap.get(uid)
         const originalFile = this.fileRegistry.get(uid)
@@ -173,7 +178,8 @@ export class UploadManager {
                 status: "success",
                 uid,
                 file: originalFile,
-                hash
+                hash,
+                data
             })
             this.promiseMap.delete(uid)
         }
@@ -196,7 +202,6 @@ export class UploadManager {
             })
             this.promiseMap.delete(uid)
         }
-        console.error(`上传失败 [${uid}]:`, errorMsg)
         this.cleanup(uid)
     }
 
@@ -220,14 +225,35 @@ export class UploadManager {
                 const originalFile = this.fileRegistry.get(uid)
 
                 // 3. 注入到 Context 中
-                const fullCtx: HookContext = { ...ctx, file: originalFile }
+                const fullCtx: HookContext = {
+                    ...ctx,
+                    file: originalFile,
+                    // 实现 success: 抛出内部异常，携带数据
+                    success: (data?: any) => {
+                        throw new FlowControlException("success", data)
+                    },
+
+                    //  实现 fail: 抛出内部异常，携带错误信息
+                    fail: (message: string, code?: string) => {
+                        throw new FlowControlException("fail", { message, code })
+                    }
+                }
 
                 // 4. 执行 Hook (运行在主线程，可访问闭包)
                 const result = await userHook(fullCtx)
                 reply.data = result
             }
         } catch (error) {
-            reply.error = formatError(error)
+            if (error instanceof FlowControlException) {
+                // 这是一个正常的流程控制，不是代码报错
+                reply.data = {
+                    __action__: error.type, // 'success' | 'fail'
+                    payload: error.payload
+                }
+            } else {
+                // 这是一个真正的代码错误
+                reply.error = formatError(error)
+            }
         }
 
         // 5. 返回结果给 Worker
@@ -247,8 +273,7 @@ export class UploadManager {
     // --- Public API ---
 
     static getInstance() {
-        if (!UploadManager.instance)
-            UploadManager.instance = new UploadManager()
+        if (!UploadManager.instance) UploadManager.instance = new UploadManager()
         return UploadManager.instance
     }
 
@@ -345,10 +370,7 @@ export class UploadManager {
 
             // 错误监听 (Worker 加载失败等)
             tempWorker.onerror = event => {
-                const errorMsg =
-                    event instanceof ErrorEvent
-                        ? event.message
-                        : "Worker Init Failed"
+                const errorMsg = event instanceof ErrorEvent ? event.message : "Worker Init Failed"
 
                 this.updateFileState(uid, {
                     status: "error",
@@ -495,13 +517,21 @@ export class UploadManager {
      * @param customOptions - 本次任务专用的配置 (如 API 路径、Hooks)
      * @returns Promise<UploadSuccessResult> - 成功返回结果，失败/取消抛出异常
      */
-    public async startUpload(
-        file: any,
-        customOptions?: Partial<UploadConfig>
-    ): Promise<UploadSuccessResult> {
+    public async startUpload(file: any, customOptions?: Partial<UploadConfig>): Promise<UploadSuccessResult> {
         // 1. 提取原始文件对象和 UID
         const rawFile = file.originFileObj ? file.originFileObj : file
         const uid = rawFile.uid || `${Date.now()}`
+
+        // 如果 promiseMap 中存在该 UID，说明上一次的 startUpload 还没结束（Done/Error/Cancel 都会清理 Map）
+        if (this.promiseMap.has(uid)) {
+            throw {
+                status: "error",
+                uid,
+                file: rawFile,
+                error: new Error("Task is already running"),
+                code: "TASK_RUNNING"
+            } as UploadErrorResult
+        }
 
         // 2. 【关键修复】移出忽略名单
         // 如果该文件之前被取消过，UID 会在忽略名单里。
@@ -530,11 +560,7 @@ export class UploadManager {
         // 决定初始进度：
         // - 如果 Ready -> 归 0 (准备开始上传流程)
         // - 如果正在算 -> 继承当前进度 (比如 50%)，防止 UI 闪回 0
-        const initialProgress = isReady
-            ? 0
-            : isCalculating
-            ? currentState?.progress || 0
-            : 0
+        const initialProgress = isReady ? 0 : isCalculating ? currentState?.progress || 0 : 0
 
         // 更新 UI
         this.updateFileState(uid, {
@@ -555,8 +581,7 @@ export class UploadManager {
         // 将 "/api" 转换为 "http://localhost:3000/api"
         let finalServerUrl = this.config.serverUrl
         if (finalServerUrl && !finalServerUrl.startsWith("http")) {
-            finalServerUrl = new URL(finalServerUrl, window.location.origin)
-                .href
+            finalServerUrl = new URL(finalServerUrl, window.location.origin).href
         }
 
         // ============================================================

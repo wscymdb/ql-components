@@ -1,20 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import {
-    type GlobalUploadState,
-    type UploadConfig,
-    type SingleFileState
-} from "@/types"
 import { UploadManager } from "@/core"
-import { UploadBatchError } from "@/utils/UploadBatchError"
+import { UploadBatchError } from "@/utils"
+import type { GlobalUploadState, UploadConfig, SingleFileState } from "@/types"
 
 const manager = UploadManager.getInstance()
 
 export const useUpload = () => {
     // 1. 初始化状态
     // 直接从 manager 获取最新快照，防止组件重新挂载时状态回退
-    const [uploadMap, setUploadMap] = useState<GlobalUploadState>(() =>
-        manager.getState()
-    )
+    const [uploadMap, setUploadMap] = useState<GlobalUploadState>(() => manager.getState())
 
     // 2. RAF 引用
     // 用于存储 requestAnimationFrame 的 ID，以便在组件卸载或任务结束时取消轮询
@@ -36,9 +30,7 @@ export const useUpload = () => {
             setUploadMap(latestState)
 
             // C. 检查是否还有任务在跑
-            const isUploading = Object.values(latestState).some(
-                item => item.status === "uploading"
-            )
+            const isUploading = Object.values(latestState).some(item => item.status === "uploading")
 
             // D. 如果还在上传，预约下一帧继续查询
             if (isUploading) {
@@ -53,9 +45,7 @@ export const useUpload = () => {
         // 订阅逻辑：作为“点火器”
         // ============================================================
         const unsubscribe = manager.subscribe(newState => {
-            const isUploading = Object.values(newState).some(
-                item => item.status === "uploading"
-            )
+            const isUploading = Object.values(newState).some(item => item.status === "uploading")
 
             // 1. 如果监测到任务开始，且轮询还没跑，就启动轮询
             if (isUploading && !rafIdRef.current) {
@@ -75,9 +65,7 @@ export const useUpload = () => {
         // 如果用户从 Page A 跳到 Page B，Manager 还在跑，
         // 这里能检测到并立即恢复 RAF 轮询，进度条无缝衔接。
         const startState = manager.getState()
-        if (
-            Object.values(startState).some(item => item.status === "uploading")
-        ) {
+        if (Object.values(startState).some(item => item.status === "uploading")) {
             loopQuery()
         }
 
@@ -97,9 +85,7 @@ export const useUpload = () => {
 
     const startUpload = useCallback(async (fileList: any[]) => {
         // 兼容 AntD 的 FileList 类数组转普通数组
-        const files = Array.isArray(fileList)
-            ? fileList
-            : Array.from(fileList || [])
+        const files = Array.isArray(fileList) ? fileList : Array.from(fileList || [])
 
         // 1. 拿到所有 Promise
         const tasks = files.map(file => manager.startUpload(file))
@@ -115,16 +101,13 @@ export const useUpload = () => {
         })
 
         // 4. 如果有错误，抛出包含完整结果的异常，供业务层(Modal)捕获
-        // 3. 【核心修复】检查是否有 非成功 的项
+        // 【核心修复】检查是否有 非成功 的项
         // 只要有一个是 error 或者 cancelled，我们就认为这一批次“不完美”，抛出异常让 UI 处理
         const hasIssue = results.some(r => r.status !== "success")
 
         if (hasIssue) {
             // 抛出 UploadBatchError，把完整的结果单带出去
-            throw new UploadBatchError(
-                "Batch upload finished with issues",
-                results
-            )
+            throw new UploadBatchError("Batch upload finished with issues", results)
         }
 
         return results
@@ -160,9 +143,7 @@ export const useUpload = () => {
      * 用户在 onChange 时调用
      */
     const preCalculate = useCallback(async (fileList: any[]) => {
-        const files = Array.isArray(fileList)
-            ? fileList
-            : Array.from(fileList || [])
+        const files = Array.isArray(fileList) ? fileList : Array.from(fileList || [])
 
         files.forEach(file => {
             const uid = file.uid || file.originFileObj?.uid
@@ -171,11 +152,7 @@ export const useUpload = () => {
             const current = manager.getState()[uid]
             if (current) {
                 // 如果已经算完了，或者正在算，或者是正在传，都跳过
-                if (
-                    current.hash ||
-                    current.status === "calculating" ||
-                    current.status === "uploading"
-                ) {
+                if (current.hash || current.status === "calculating" || current.status === "uploading") {
                     return
                 }
             }
@@ -189,10 +166,7 @@ export const useUpload = () => {
 
     // 取消上传
     const cancelUpload = useCallback((fileOrUid: any) => {
-        const uid =
-            typeof fileOrUid === "string"
-                ? fileOrUid
-                : fileOrUid.uid || fileOrUid.originFileObj?.uid
+        const uid = typeof fileOrUid === "string" ? fileOrUid : fileOrUid.uid || fileOrUid.originFileObj?.uid
 
         if (!uid) {
             console.error("缺少 uid", fileOrUid)
@@ -208,10 +182,7 @@ export const useUpload = () => {
     }, [])
 
     const removeFile = useCallback((fileOrUid: any) => {
-        const uid =
-            typeof fileOrUid === "string"
-                ? fileOrUid
-                : fileOrUid.uid || fileOrUid.originFileObj?.uid
+        const uid = typeof fileOrUid === "string" ? fileOrUid : fileOrUid.uid || fileOrUid.originFileObj?.uid
 
         if (!uid) {
             console.error("缺少 uid", fileOrUid)

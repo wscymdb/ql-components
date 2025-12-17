@@ -3,14 +3,10 @@ import {
     calculateFileHash,
     log,
     initRPCListener,
-    requestWithValidate
+    requestWithValidate,
+    WorkerControlFlow
 } from "./worker.utils"
-import type {
-    WorkerInitPayload,
-    WorkerMessage,
-    RequestOption,
-    ChunkItem
-} from "../types"
+import type { WorkerInitPayload, WorkerMessage, RequestOption, ChunkItem } from "../types"
 import { formatError } from "../utils"
 
 // 启动 RPC 监听
@@ -88,9 +84,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
     // 默认生成器
     const defaultGenerators = {
         check: (ctx: any) => ({
-            url: `${serverUrl}${apiPaths?.check || "/upload_already"}?HASH=${
-                ctx.hash
-            }`,
+            url: `${serverUrl}${apiPaths?.check || "/upload_already"}?HASH=${ctx.hash}`,
             method: "GET"
         }),
         upload: (_ctx: any) => ({
@@ -110,11 +104,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
     }
 
     // 辅助：执行 Hook 步骤
-    const executeStep = async <T>(
-        hookName: any,
-        defaultFn: (c: any) => T,
-        localCtx: any
-    ): Promise<T> => {
+    const executeStep = async <T>(hookName: any, defaultFn: (c: any) => T, localCtx: any): Promise<T> => {
         // 剔除 Blob/File，只传轻量元数据给主线程
         const { chunk: _chunk, file: _file, ...rpcCtx } = localCtx
 
@@ -151,7 +141,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
         const suffix = file.name.split(".").pop() || "tmp"
 
         // --- 3. Init ---
-        const initData = await callMainThread(uid, "init", {
+        const initData = await callMainThread<any>(uid, "init", {
             count: totalChunks,
             chunkSize: chunkSize,
             hash
@@ -164,10 +154,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
         const chunksList: ChunkItem[] = []
         for (let i = 0; i < totalChunks; i++) {
             chunksList.push({
-                file: file.slice(
-                    i * chunkSize,
-                    Math.min((i + 1) * chunkSize, file.size)
-                ),
+                file: file.slice(i * chunkSize, Math.min((i + 1) * chunkSize, file.size)),
                 filename: `${hash}_${i + 1}.${suffix}`,
                 index: i + 1
             })
@@ -178,19 +165,9 @@ self.onmessage = async (e: MessageEvent<any>) => {
         if (checkEnabled) {
             try {
                 const ctx = { hash, filename: file.name, initData }
-                const opt = await executeStep<RequestOption>(
-                    "check",
-                    defaultGenerators.check,
-                    ctx
-                )
+                const opt = await executeStep<RequestOption>("check", defaultGenerators.check, ctx)
 
-                const res = await requestWithValidate(
-                    uid,
-                    opt,
-                    ctx,
-                    "check",
-                    reqConfig
-                )
+                const res = await requestWithValidate(uid, opt, ctx, "check", reqConfig)
 
                 if (res?.fileList) uploadedList = res.fileList
             } catch (e) {
@@ -203,9 +180,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
         if (cancelledUIDs.has(uid)) throw new Error("TaskCanceled")
 
         // --- 6. Upload (重点) ---
-        const chunksToDo = chunksList.filter(
-            c => !uploadedList.includes(c.filename)
-        )
+        const chunksToDo = chunksList.filter(c => !uploadedList.includes(c.filename))
 
         if (chunksToDo.length === 0) {
             self.postMessage({
@@ -232,27 +207,18 @@ self.onmessage = async (e: MessageEvent<any>) => {
                     initData
                 }
                 // A. 获取配置
-                const opt = await executeStep<RequestOption>(
-                    "upload",
-                    defaultGenerators.upload,
-                    ctx
-                )
+                const opt = await executeStep<RequestOption>("upload", defaultGenerators.upload, ctx)
 
                 // B. 【核心】自动组装 FormData
                 // 这里的逻辑是：如果用户返回了 JSON body，我们就把它塞进 FormData，并把切片塞进去
                 let finalBody: BodyInit | null = opt.body as BodyInit
 
                 // 仅当 POST 且 body 不是 FormData 实例时，自动组装
-                if (
-                    (!opt.method || opt.method === "POST") &&
-                    !(finalBody instanceof FormData)
-                ) {
+                if ((!opt.method || opt.method === "POST") && !(finalBody instanceof FormData)) {
                     const fd = new FormData()
                     // 1. 塞入用户自定义字段
                     if (opt.body && typeof opt.body === "object") {
-                        Object.entries(opt.body).forEach(([k, v]) =>
-                            fd.append(k, v)
-                        )
+                        Object.entries(opt.body).forEach(([k, v]) => fd.append(k, v))
                     }
                     // 2. 塞入切片 (默认字段 'file')
                     fd.append(opt.chunkFieldName || "file", chunkItem.file)
@@ -265,23 +231,17 @@ self.onmessage = async (e: MessageEvent<any>) => {
                     finalBody = fd
                 }
 
-                const task = requestWithValidate(
-                    uid,
-                    { ...opt, body: finalBody },
-                    ctx,
-                    "upload",
-                    reqConfig
-                ).then(() => {
-                    finishedCount++
-                    self.postMessage({
-                        type: "progress",
-                        uid,
-                        percent: Number(
-                            ((finishedCount / totalChunks) * 100).toFixed(2)
-                        )
-                    } as WorkerMessage)
-                    pool.delete(task)
-                })
+                const task = requestWithValidate(uid, { ...opt, body: finalBody }, ctx, "upload", reqConfig).then(
+                    () => {
+                        finishedCount++
+                        self.postMessage({
+                            type: "progress",
+                            uid,
+                            percent: Number(((finishedCount / totalChunks) * 100).toFixed(2))
+                        } as WorkerMessage)
+                        pool.delete(task)
+                    }
+                )
 
                 pool.add(task)
                 if (pool.size >= concurrency) await Promise.race(pool)
@@ -299,21 +259,44 @@ self.onmessage = async (e: MessageEvent<any>) => {
             filename: file.name,
             initData
         }
-        const mergeOpt = await executeStep<RequestOption>(
-            "merge",
-            defaultGenerators.merge,
-            ctx
-        )
+        const mergeOpt = await executeStep<RequestOption>("merge", defaultGenerators.merge, ctx)
 
         await requestWithValidate(uid, mergeOpt, ctx, "merge", reqConfig)
 
         self.postMessage({ type: "done", uid, hash } as WorkerMessage)
     } catch (error) {
-        // 如果是取消导致的错误，静默处理，不报错给主线程
+        // 1. 统一捕获控制流
+        if (error instanceof WorkerControlFlow) {
+            // 场景 A: 秒传成功 (ctx.success)
+            if (error.type === "success") {
+                const data = error.payload
+                log(showLog, `[${uid}] Task completed via ctx.success()`)
+                // 补发 100%
+                self.postMessage({ type: "progress", uid, percent: 100 } as WorkerMessage)
+                // 发送 Done
+                self.postMessage({ type: "done", uid, hash: (config as any).hash || "", data } as WorkerMessage)
+            }
+
+            // 场景 B: 业务拦截 (ctx.fail)
+            else if (error.type === "fail") {
+                const { message, code } = error.payload
+                // 发送 Error (带上 code)
+                self.postMessage({
+                    type: "error",
+                    uid,
+                    error: message || "Task Failed",
+                    code
+                } as WorkerMessage)
+            }
+
+            return // 捕获处理完毕，退出
+        }
+        // 2. 处理取消 (静默退出)
         if (error instanceof Error && error.message === "TaskCanceled") {
             return // 静默退出，不报错
         }
 
+        // 3. 处理普通代码错误 (格式化后发送)
         self.postMessage({
             type: "error",
             uid,

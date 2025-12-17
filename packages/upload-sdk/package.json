@@ -1,6 +1,6 @@
 {
     "name": "@ql-react-components/upload-sdk",
-    "version": "0.6.0",
+    "version": "0.7.2",
     "description": "基于react的大文件上传sdk",
     "type": "module",
     "module": "es/index.js",

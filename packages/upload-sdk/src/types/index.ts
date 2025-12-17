@@ -31,24 +31,31 @@ export interface RequestOption {
 }
 
 /**
- * Hook 上下文对象
+ * 基础数据部分 (Worker -> 主线程 传输用)
+ * 这里只包含可序列化的 JSON 数据
  */
-export interface HookContext {
+export interface HookContextData {
     filename?: string
     hash?: string
     index?: number
     count?: number
     chunkSize?: number
     initData?: any
-    /**
-     * 原始文件对象
-     * Manager 会在主线程自动注入，Worker 不需要传递此对象
-     */
+    response?: any // 只存在于 validateResponse 钩子
+    hookName?: "check" | "upload" | "merge" // 当前触发校验的阶段名称
+}
+
+/**
+ * 完整上下文 (主线程 -> 用户 Hook 用)
+ * 包含数据 + 注入的方法/对象
+ */
+export interface HookContext extends HookContextData {
+    // 原始文件对象 (Worker 无法传递，主线程注入)
     file?: File
 
-    /**  以下属性仅在 validateResponse 钩子中存在 */
-    response?: any // 后端返回的响应体，
-    hookName?: "check" | "upload" | "merge" // 当前触发校验的阶段名称
+    // 控制流方法 (主线程注入)
+    success: (data?: any) => never
+    fail: (message: string, code?: string) => never
 }
 
 /**
@@ -104,15 +111,7 @@ export interface SingleFileState {
     uid: string
     progress: number
     name: string
-    status:
-        | "idle"
-        | "calculating"
-        | "ready"
-        | "checking"
-        | "uploading"
-        | "done"
-        | "error"
-        | "cancelled"
+    status: "idle" | "calculating" | "ready" | "checking" | "uploading" | "done" | "error" | "cancelled"
     hash?: string
     errorMsg?: string
 }
@@ -139,7 +138,7 @@ export interface RPCCallPayload {
     reqId: string
     uid: string // [关键] 用于主线程查找 File
     hookName: keyof NonNullable<UploadConfig["hooks"]>
-    ctx: HookContext
+    ctx: HookContextData
 }
 
 /** 主线程 -> Worker: Hook 执行结果 */
@@ -154,22 +153,21 @@ export interface RPCResultPayload {
 export type WorkerReportMessage =
     | { type: "progress"; uid: string; percent: number }
     | { type: "hash_progress"; uid: string; percent: number }
-    | { type: "done"; uid: string; hash: string }
-    | { type: "error"; uid: string; error: string }
+    | { type: "done"; uid: string; hash: string; data?: any }
+    | { type: "error"; uid: string; error: string; code?: string }
     | { type: "hash_result"; uid: string; hash: string } // 用于 preCalculate 的结果
     | { type: "log"; message: string }
 
 export type WorkerMessage = RPCCallPayload | WorkerReportMessage
-export type MainToWorkerMessage =
-    | WorkerInitPayload
-    | RPCResultPayload
-    | { type: "cancel"; uid: string }
+export type MainToWorkerMessage = WorkerInitPayload | RPCResultPayload | { type: "cancel"; uid: string }
 
+export type UploadErrorCode = "TASK_RUNNING"
 export interface UploadSuccessResult {
     status: "success"
     uid: string
     file: File
     hash: string
+    data?: any
 }
 
 export interface UploadErrorResult {
@@ -177,6 +175,7 @@ export interface UploadErrorResult {
     uid: string
     file: File
     error: Error
+    code?: UploadErrorCode
 }
 
 export interface UploadCancelledResult {
@@ -186,7 +185,4 @@ export interface UploadCancelledResult {
 }
 
 // 联合类型
-export type UploadResult =
-    | UploadSuccessResult
-    | UploadErrorResult
-    | UploadCancelledResult
+export type UploadResult = UploadSuccessResult | UploadErrorResult | UploadCancelledResult

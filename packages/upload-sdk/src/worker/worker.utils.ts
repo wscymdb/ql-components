@@ -1,17 +1,15 @@
 import { createSHA256 } from "hash-wasm"
-import type {
-    RequestOption,
-    MainToWorkerMessage,
-    HookContext,
-    UploadConfig,
-    WorkerMessage
-} from "../types"
+import type { RequestOption, MainToWorkerMessage, UploadConfig, WorkerMessage, HookContextData } from "../types"
+
+export class WorkerControlFlow {
+    constructor(
+        public type: "success" | "fail",
+        public payload: any
+    ) {}
+}
 
 // 存储等待中的 Promise
-const pendingRequestMap = new Map<
-    string,
-    { resolve: (val: any) => void; reject: (err: any) => void }
->()
+const pendingRequestMap = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>()
 
 /**
  * 1. 初始化 RPC 监听 (需在 Worker 顶部调用)
@@ -37,7 +35,7 @@ export const initRPCListener = () => {
 export const callMainThread = <T>(
     uid: string, //  必须传递 uid
     hookName: keyof NonNullable<UploadConfig["hooks"]>,
-    ctx: HookContext
+    ctx: HookContextData
 ): Promise<T | null> => {
     return new Promise((resolve, reject) => {
         // 生成唯一请求ID
@@ -54,6 +52,14 @@ export const callMainThread = <T>(
             ctx // 注意：这里传的是不含 file/chunk 的纯 JSON 上下文
         }
         self.postMessage(payload)
+    }).then((result: any) => {
+        if (result && result.__action__) {
+            // 直接抛出特殊异常，中断 Worker 后续逻辑
+            throw new WorkerControlFlow(result.__action__, result.payload)
+        }
+
+        // 正常数据
+        return result as T
     })
 }
 
@@ -73,8 +79,7 @@ export const request = async (opt: RequestOption, token?: string) => {
         body: opt.body as BodyInit
     })
 
-    if (!response.ok)
-        throw new Error(`请求失败 [${response.status}]: ${response.statusText}`)
+    if (!response.ok) throw new Error(`请求失败 [${response.status}]: ${response.statusText}`)
     try {
         return await response.json()
     } catch {
@@ -116,12 +121,13 @@ export const requestWithValidate = async (
 
     // 4. RPC 业务校验
     try {
-        await callMainThread(uid, "validateResponse", {
+        await callMainThread<any>(uid, "validateResponse", {
             ...cleanCtx,
             response: res, // 将后端返回结果注入
             hookName // 告知主线程当前阶段
         })
     } catch (err: any) {
+        if (err instanceof WorkerControlFlow) throw err
         // 捕获主线程抛出的业务错误
         throw new Error(err?.message || "Server Validation Failed")
     }
@@ -170,9 +176,7 @@ export const calculateFileHash = async (
                     const now = Date.now()
                     // 每 100ms 或者已经最后一块了，才发送一次通知
                     if (now - lastNotifyTime > 100 || currentChunk === chunks) {
-                        const percent = Number(
-                            ((currentChunk / chunks) * 100).toFixed(0)
-                        )
+                        const percent = Number(((currentChunk / chunks) * 100).toFixed(0))
                         onProgress(percent)
                         lastNotifyTime = now
                     }
@@ -225,10 +229,7 @@ export const log = (showLog: boolean = false, message: string) => {
 export const resolveUrl = (baseUrl: string, relativePath: string) => {
     if (!baseUrl) return relativePath
     // 如果已经是绝对路径（http://...），直接返回
-    if (
-        relativePath.startsWith("http://") ||
-        relativePath.startsWith("https://")
-    ) {
+    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
         return relativePath
     }
     // 去除 baseUrl 尾部的 / 和 relativePath 头部的 /，防止双斜杠

@@ -1,35 +1,30 @@
-import { Button, message, Upload, UploadProps } from "antd"
-import { useEffect, useRef } from "react"
+import { Button, message, Upload, UploadProps, Card, Tag, Alert, Progress } from "antd"
+import { useEffect, useState } from "react"
 import { UploadBatchError, useUpload } from "@ql-react-components/upload-sdk"
-import { UploadOutlined } from "@ant-design/icons"
+import { UploadOutlined, FileOutlined, CloseCircleOutlined } from "@ant-design/icons"
+import type { UploadFile } from "antd/es/upload/interface"
 
-const BigFileUpload = () => {
-    const { startUpload } = useUpload()
-    const fileListRef = useRef<any[]>([])
-
-    const { setUploadConfig } = useUpload()
+const ErrorHandleDemo = () => {
+    // 1. 记得解构出 uploadMap 以展示 UI
+    const { startUpload, setUploadConfig, uploadMap } = useUpload()
+    const [fileList, setFileList] = useState<UploadFile[]>([])
 
     useEffect(() => {
         setUploadConfig({
             serverUrl: "/api",
             hooks: {
-                // 【核心技巧】我们在前端模拟后端业务错误
-                validateResponse: ({ file }) => {
-                    // 模拟：只要文件名包含 "fail"，就抛出业务错误
-                    if (file?.name.includes("fail")) {
-                        throw new Error("模拟业务错误：文件名包含敏感词")
+                // 前端模拟业务错误拦截
+                validateResponse: ctx => {
+                    // 模拟：只要文件名包含 "fail"，就视为业务失败
+                    if (ctx.file?.name.includes("fail")) {
+                        // ✅ 使用 fail 方法优雅中断
+                        ctx.fail("模拟业务错误：文件名包含敏感词 'fail'")
                     }
-                    // 正常文件放行
                 },
-                // 为了演示方便，我们甚至可以拦截 upload 请求直接返回假成功
-                // 这样用户不需要真实的后端也能跑通 Demo
+                // 模拟上传请求
                 upload: async () => {
-                    // 模拟网络延迟
-                    await new Promise(r => setTimeout(r, 500))
-                    return {
-                        url: "/mock-success",
-                        method: "POST"
-                    } // 配置无所谓，validateResponse 才是关键
+                    await new Promise(r => setTimeout(r, 600))
+                    return { url: "/mock-success", method: "POST" }
                 }
             }
         })
@@ -37,34 +32,26 @@ const BigFileUpload = () => {
 
     const uploadProps: UploadProps = {
         name: "file",
+        multiple: true,
+        fileList,
         beforeUpload: () => false,
-        onChange: ({ fileList }) => {
-            fileListRef.current = fileList
-        }
+        onChange: ({ fileList }) => setFileList(fileList),
+        showUploadList: false // 我们自己渲染 Card
     }
 
     const handleUpload = async () => {
-        try {
-            const fileList = fileListRef.current
-            if (fileList.length === 0) {
-                return message.warning("请选择文件后再上传")
-            }
+        if (fileList.length === 0) return message.warning("请选择文件")
 
-            await startUpload(fileList)
-            message.success("上传成功")
+        try {
+            await startUpload(fileList.map(f => f.originFileObj))
+            message.success("太棒了，所有文件上传成功！")
         } catch (err) {
-            console.log(err)
             // 【关键】捕获部分失败
             if (err instanceof UploadBatchError) {
-                const failCount = err.results.filter(
-                    r => r.status === "error"
-                ).length
-                message.error(
-                    `上传完成，但在 ${err.results.length} 个文件中失败了 ${failCount} 个`
-                )
+                const failCount = err.results.filter(r => r.status === "error").length
+                message.error(`上传结束，有 ${failCount} 个文件失败，请检查列表`)
 
-                // 注意：这里不要清空 fileList 或关闭弹窗
-                // 应该保留 UI 让用户看到具体是哪个红了
+                // 注意：报错后不要清空列表，保留 UI 让用户看到错误原因
             } else {
                 console.error(err)
                 message.error("发生了未知系统错误")
@@ -73,18 +60,62 @@ const BigFileUpload = () => {
     }
 
     return (
-        <div className="big-file-upload">
-            <Upload {...uploadProps}>
-                <Button icon={<UploadOutlined />} type="primary">
-                    上传文件到浏览器
-                </Button>
-            </Upload>
+        <div className="big-file-upload" style={{ padding: 20 }}>
+            <Alert
+                title="测试指南"
+                description="请尝试上传两个文件：一个正常命名，另一个改名为 'fail.txt'，观察部分失败的处理效果。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+            />
 
-            <Button style={{ marginTop: 10 }} onClick={handleUpload}>
-                开始切片上传到服务器
-            </Button>
+            <div style={{ marginBottom: 16 }}>
+                <Upload {...uploadProps}>
+                    <Button icon={<UploadOutlined />}>选择多个文件</Button>
+                </Upload>
+                <Button
+                    type="primary"
+                    style={{ marginLeft: 16 }}
+                    onClick={handleUpload}
+                    disabled={fileList.length === 0}
+                >
+                    触发上传
+                </Button>
+            </div>
+
+            {/* 渲染进度列表，展示错误状态 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {Object.values(uploadMap).map(item => (
+                    <Card key={item.uid} size="small" bodyStyle={{ padding: "8px 12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <FileOutlined />
+                                <span style={{ fontWeight: 500 }}>{item.name}</span>
+                            </div>
+                            <div>
+                                {item.status === "error" && <Tag color="error">失败</Tag>}
+                                {item.status === "done" && <Tag color="success">成功</Tag>}
+                                {item.status === "uploading" && <Tag color="blue">上传中</Tag>}
+                            </div>
+                        </div>
+
+                        <Progress
+                            percent={item.progress}
+                            status={item.status === "error" ? "exception" : "active"}
+                            showInfo={false}
+                        />
+
+                        {/* 红色错误提示 */}
+                        {item.status === "error" && (
+                            <div style={{ color: "#ff4d4f", fontSize: 12, marginTop: 4 }}>
+                                <CloseCircleOutlined /> 失败原因: {item.errorMsg}
+                            </div>
+                        )}
+                    </Card>
+                ))}
+            </div>
         </div>
     )
 }
 
-export default BigFileUpload
+export default ErrorHandleDemo

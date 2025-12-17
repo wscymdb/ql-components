@@ -1,6 +1,6 @@
 ---
 title: 生命周期
-order: 1
+order: 9
 toc: content
 ---
 
