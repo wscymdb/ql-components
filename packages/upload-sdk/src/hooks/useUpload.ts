@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { UploadManager } from "@/core"
 import { UploadBatchError } from "@/utils"
-import type { GlobalUploadState, UploadConfig, SingleFileState } from "@/types"
+import type { GlobalUploadState, SingleFileState, InitializeConfig, UpdateConfig } from "@/types"
 
 const manager = UploadManager.getInstance()
 
@@ -131,11 +131,17 @@ export const useUpload = () => {
     )
 
     /**
-     * 动态设置全局配置
-     * 比如在设置页切换并发数、开关防误触等
+     * 初始化配置
      */
-    const setUploadConfig = useCallback((config: Partial<UploadConfig>) => {
-        manager.setConfig(config)
+    const initialize = useCallback((config: InitializeConfig) => {
+        manager.initialize(config)
+    }, [])
+
+    /**
+     * 更新配置
+     */
+    const updateConfig = useCallback((config: UpdateConfig) => {
+        manager.updateConfig(config)
     }, [])
 
     /**
@@ -202,8 +208,10 @@ export const useUpload = () => {
         startUpload,
         /** 获取单文件状态 helper */
         getFileState,
-        /** 设置配置 helper */
-        setUploadConfig,
+        /** 初始化配置 */
+        initialize,
+        /** 更新配置 */
+        updateConfig,
         /** 预计算 Hash helper */
         preCalculate
     }

@@ -15,10 +15,10 @@ const BigFileUpload = () => {
     const { startUpload } = useUpload()
     const fileListRef = useRef<any[]>([])
 
-    const { setUploadConfig } = useUpload()
+    const { initialize } = useUpload()
 
     useEffect(() => {
-        setUploadConfig({
+        initialize({
             serverUrl: "/api1",
             hooks: {
                 async init(_ctx) {
@@ -58,7 +58,8 @@ const BigFileUpload = () => {
                 }
             }
         })
-    }, [setUploadConfig])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // 只在组件挂载时执行一次
 
     const uploadProps: UploadProps = {
         name: "file",

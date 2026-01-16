@@ -9,16 +9,18 @@ import type {
     HookContext,
     SingleFileState,
     UploadSuccessResult,
-    UploadErrorResult
+    UploadErrorResult,
+    InitializeConfig,
+    UpdateConfig,
+    StartUploadOptions
 } from "@/types"
 
 import workerCode from "../../worker/index?worker"
 import { formatError } from "@/utils"
 import { ConcurrencyController } from "@/utils/ConcurrencyController"
 
-// 默认配置
-const DEFAULT_CONFIG: UploadConfig = {
-    serverUrl: "",
+// 默认配置(不包含 serverUrl,必须通过 initialize 设置)
+const DEFAULT_CONFIG: Partial<UploadConfig> = {
     chunkSize: 5 * 1024 * 1024,
     chunkConcurrency: 3,
     checkEnabled: true,
@@ -46,7 +48,10 @@ export class UploadManager {
     private worker: Worker | null = null
     private listeners: UploadListener[] = []
     private state: GlobalUploadState = {}
-    private config: UploadConfig = { ...DEFAULT_CONFIG }
+    private config!: UploadConfig  // 移除默认值,等待 initialize 设置
+    
+    // 【新增】初始化状态标记
+    private initialized = false
 
     // 【新增】存储临时 Hash Worker：UID -> Worker
     private tempWorkerMap: Map<string, Worker> = new Map()
@@ -75,21 +80,15 @@ export class UploadManager {
         }
     > = new Map()
 
-    // 【新增】并发控制器
-    private uploadConcurrencyController: ConcurrencyController<UploadSuccessResult>
-    private hashConcurrencyController: ConcurrencyController<string>
+    // 【新增】并发控制器(在 initialize 中初始化)
+    private uploadConcurrencyController!: ConcurrencyController<UploadSuccessResult>
+    private hashConcurrencyController!: ConcurrencyController<string>
 
     private constructor() {
-        // 初始化并发控制器
-        this.uploadConcurrencyController = new ConcurrencyController<UploadSuccessResult>(
-            DEFAULT_CONFIG.uploadConcurrency
-        )
-        this.hashConcurrencyController = new ConcurrencyController<string>(
-            DEFAULT_CONFIG.hashConcurrency
-        )
-
+        // 移除并发控制器初始化,改到 initialize 中
+        
         window.addEventListener("beforeunload", e => {
-            if (!this.config.preventWindowClose) return
+            if (!this.config?.preventWindowClose) return
             const isUploading = Object.values(this.state).some(item => item.status === "uploading")
             if (isUploading) e.preventDefault()
         })
@@ -296,19 +295,57 @@ export class UploadManager {
         return { ...this.state }
     }
 
-    public setConfig(options: Partial<UploadConfig>) {
+    /**
+     * 初始化上传管理器
+     * - 必须在第一次上传前调用
+     * - 重复调用只警告,不生效
+     * 
+     * @param config 初始化配置
+     */
+    public initialize(config: InitializeConfig): void {
+        if (this.initialized) {
+            console.warn('[UploadManager] Already initialized, config ignored')
+            return
+        }
+        
+        // 合并默认配置
         this.config = {
-            ...this.config,
-            ...options,
-            apiPaths: { ...this.config.apiPaths, ...options.apiPaths }
-        }
+            ...DEFAULT_CONFIG,
+            ...config
+        } as UploadConfig
+        
+        // 初始化并发控制器
+        this.uploadConcurrencyController = new ConcurrencyController<UploadSuccessResult>(
+            this.config.uploadConcurrency!
+        )
+        this.hashConcurrencyController = new ConcurrencyController<string>(
+            this.config.hashConcurrency!
+        )
+        
+        this.initialized = true
+    }
 
-        // 同步更新并发控制器
-        if (options.uploadConcurrency !== undefined) {
-            this.uploadConcurrencyController.updateConcurrency(options.uploadConcurrency)
+    /**
+     * 更新配置
+     * - 可以多次调用
+     * - 不能修改 serverUrl
+     * 
+     * @param config 要更新的配置项
+     */
+    public updateConfig(config: UpdateConfig): void {
+        if (!this.initialized) {
+            console.warn('[UploadManager] Not initialized, please call initialize() first')
+            return
         }
-        if (options.hashConcurrency !== undefined) {
-            this.hashConcurrencyController.updateConcurrency(options.hashConcurrency)
+        
+        this.config = { ...this.config, ...config }
+        
+        // 同步并发控制器
+        if (config.uploadConcurrency !== undefined) {
+            this.uploadConcurrencyController.updateConcurrency(config.uploadConcurrency)
+        }
+        if (config.hashConcurrency !== undefined) {
+            this.hashConcurrencyController.updateConcurrency(config.hashConcurrency)
         }
     }
 
@@ -538,24 +575,21 @@ export class UploadManager {
     /**
      * 启动上传核心方法
      *
-     * @description
-     * 1. 支持异步 await 调用，阻塞直到上传完成/失败/取消
-     * 2. 智能状态流转：
-     *    - 如果已预计算完成 (Ready) -> 状态变为 'checking' (连接服务器中)
-     *    - 如果正在预计算 (Calculating) -> 保持进度，等待计算完成
-     *    - 如果是新任务 -> 状态变为 'calculating' (从头计算)
-     * 3. 自动复用正在进行的 Hash 计算任务，避免重复计算
-     *
      * @param file - 上传的文件对象 (原生 File 或 Antd 包装对象)
-     * @param customOptions - 本次任务专用的配置 (如 API 路径、Hooks)
+     * @param options - 单文件配置 (可选)
      * @returns Promise<UploadSuccessResult> - 成功返回结果，失败/取消抛出异常
      */
-    public async startUpload(file: any, customOptions?: Partial<UploadConfig>): Promise<UploadSuccessResult> {
-        // 1. 提取原始文件对象和 UID
+    public async startUpload(file: any, options?: StartUploadOptions): Promise<UploadSuccessResult> {
+        // 1. 检查是否已初始化
+        if (!this.initialized) {
+            throw new Error('[UploadManager] Not initialized, please call initialize() first')
+        }
+        
+        // 2. 提取原始文件对象和 UID
         const rawFile = file.originFileObj ? file.originFileObj : file
         const uid = rawFile.uid || `${Date.now()}`
 
-        // 如果 promiseMap 中存在该 UID,说明上一次的 startUpload 还没结束(Done/Error/Cancel 都会清理 Map)
+        // 3. 检查是否重复上传
         if (this.promiseMap.has(uid)) {
             throw {
                 status: "error",
@@ -566,18 +600,13 @@ export class UploadManager {
             } as UploadErrorResult
         }
 
-        // 2. 【关键修复】移出忽略名单
-        // 如果该文件之前被取消过,UID 会在忽略名单里。
-        // 这里必须移除,否则新启动的任务发来的 Worker 消息会被 Manager 丢弃,导致进度条不动。
+        // 4. 移出忽略名单
         this.ignoringUIDs.delete(uid)
 
-        // 3. 注册文件引用 (供 RPC 钩子读取)
+        // 5. 注册文件引用
         this.fileRegistry.set(uid, rawFile)
 
-        // 4. 应用临时配置
-        if (customOptions) this.setConfig(customOptions)
-
-        // 5. 先设置为 queued 状态
+        // 6. 先设置为 queued 状态
         this.updateFileState(uid, {
             uid,
             name: rawFile.name,
@@ -590,6 +619,13 @@ export class UploadManager {
             // ============================================================
             // 进入并发控制器后,开始实际的上传流程
             // ============================================================
+            
+            // 合并配置(不修改 this.config)
+            const finalConfig = {
+                ...this.config,
+                hooks: { ...this.config.hooks, ...options?.hooks },
+                apiPaths: { ...this.config.apiPaths, ...options?.apiPaths }
+            }
 
             const currentState = this.state[uid]
 
@@ -617,7 +653,7 @@ export class UploadManager {
 
             // 处理 serverUrl 相对路径 (适配开发环境 Proxy)
             // 将 "/api" 转换为 "http://localhost:3000/api"
-            let finalServerUrl = this.config.serverUrl
+            let finalServerUrl = finalConfig.serverUrl
             if (finalServerUrl && !finalServerUrl.startsWith("http")) {
                 finalServerUrl = new URL(finalServerUrl, window.location.origin).href
             }
@@ -672,12 +708,12 @@ export class UploadManager {
                     file: rawFile,
                     config: {
                         serverUrl: finalServerUrl,
-                        chunkSize: this.config.chunkSize,
-                        chunkConcurrency: this.config.chunkConcurrency,
-                        token: this.config.token,
-                        // checkEnabled: this.config.checkEnabled, // 暂不支持
-                        apiPaths: this.config.apiPaths,
-                        showLog: this.config.showLog,
+                        chunkSize: finalConfig.chunkSize,
+                        chunkConcurrency: finalConfig.chunkConcurrency,
+                        token: finalConfig.token,
+                        // checkEnabled: finalConfig.checkEnabled, // 暂不支持
+                        apiPaths: finalConfig.apiPaths,
+                        showLog: finalConfig.showLog,
 
                         // 【关键】将 Hash 传给 Worker
                         // Worker 收到这个值后,会直接跳过内部的计算步骤,直接进入 Upload

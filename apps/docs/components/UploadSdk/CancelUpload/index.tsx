@@ -10,14 +10,14 @@ const CancelDemo = () => {
         uploadMap,
         cancelUpload,
         removeFile, // 用于彻底删除
-        setUploadConfig,
+        initialize,
         startUpload
     } = useUpload()
 
     const [fileList, setFileList] = useState<UploadFile[]>([])
 
     useEffect(() => {
-        setUploadConfig({
+        initialize({
             serverUrl: "/api",
             // 模拟配置：故意让上传变慢，方便演示取消
             hooks: {
@@ -28,7 +28,8 @@ const CancelDemo = () => {
                 }
             }
         })
-    }, [setUploadConfig])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // 只在组件挂载时执行一次
 
     const uploadProps: UploadProps = {
         name: "file",

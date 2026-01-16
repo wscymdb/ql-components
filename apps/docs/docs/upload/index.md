@@ -42,10 +42,11 @@ pnpm add @ql-react-components/upload-sdk
 
 :::warning
 **⚠️ 关于配置的最佳实践**
-本 SDK 采用 **单例模式** 管理状态。`setUploadConfig` 修改的是**全局配置**。
+本 SDK 采用 **单例模式** 管理状态。
 
-- **请避免**：在业务组件（如 Modal、Drawer）中重复调用 `setUploadConfig` 修改 `serverUrl`。这会导致全局状态被覆盖或叠加（例如出现 `/api/api/...` 的路径拼接错误）。
-- **推荐做法**： 1. **全局配置**：仅在项目入口（如 `App.tsx`）调用一次 `setUploadConfig`，配置通用的 `serverUrl` 和 `validateResponse`。 2. **局部配置**：如果某个业务模块需要特殊的 API 地址，请在调用时传入：`await startUpload(files, { serverUrl: '/special/api' })`。
+- **初始化配置**:必须在应用启动时调用 `initialize()` 设置 `serverUrl` 等核心配置,只能调用一次(重复调用只警告不生效)。
+- **动态更新**:使用 `updateConfig()` 可以随时修改 `token`、并发数等配置,但**不能修改 serverUrl**。
+- **单文件配置**:如果某个文件需要特殊处理,可以在上传时传入 `options`:`await startUpload(file, { hooks: {...}, apiPaths: {...} })`
 
 :::
 

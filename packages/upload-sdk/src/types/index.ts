@@ -203,3 +203,27 @@ export interface UploadCancelledResult {
 
 // 联合类型
 export type UploadResult = UploadSuccessResult | UploadErrorResult | UploadCancelledResult
+
+/**
+ * ============================================================================
+ * 配置系统类型定义
+ * ============================================================================
+ */
+
+/**
+ * 初始化配置(与 UploadConfig 相同)
+ */
+export type InitializeConfig = UploadConfig
+
+/**
+ * 更新配置(不能修改 serverUrl)
+ */
+export type UpdateConfig = Partial<Omit<UploadConfig, 'serverUrl'>>
+
+/**
+ * 单文件上传配置
+ */
+export interface StartUploadOptions {
+    hooks?: UploadConfig['hooks']
+    apiPaths?: UploadConfig['apiPaths']
+}

@@ -5,18 +5,19 @@ import { UploadOutlined } from "@ant-design/icons"
 
 const BigFileUpload = () => {
     const [fileList, setFileList] = useState<any[]>([])
-    const { uploadMap, setUploadConfig, preCalculate, startUpload } = useUpload()
+    const { uploadMap, initialize, preCalculate, startUpload } = useUpload()
 
     useEffect(() => {
         console.log(uploadMap)
     }, [uploadMap])
 
     useEffect(() => {
-        setUploadConfig({
+        initialize({
             showLog: true,
             serverUrl: "/api"
         })
-    }, [setUploadConfig])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // 只在组件挂载时执行一次
 
     // 计算当前是否正在处理中 (计算中 或 上传中)
     const isProcessing = useMemo(() => {
