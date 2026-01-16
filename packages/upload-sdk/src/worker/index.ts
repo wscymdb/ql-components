@@ -69,7 +69,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
     const {
         serverUrl,
         chunkSize = 5 * 1024 * 1024,
-        concurrency = 3,
+        chunkConcurrency = 3,
         token,
         // checkEnabled,
         showLog = true,
@@ -244,7 +244,7 @@ self.onmessage = async (e: MessageEvent<any>) => {
                 )
 
                 pool.add(task)
-                if (pool.size >= concurrency) await Promise.race(pool)
+                if (pool.size >= chunkConcurrency) await Promise.race(pool)
             }
             await Promise.all(pool)
         }
@@ -305,4 +305,4 @@ self.onmessage = async (e: MessageEvent<any>) => {
     }
 }
 
-export {}
+export { }

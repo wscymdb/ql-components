@@ -67,10 +67,27 @@ export interface UploadConfig {
     serverUrl: string
     token?: string
     chunkSize?: number
-    concurrency?: number
     checkEnabled?: boolean
     preventWindowClose?: boolean
     showLog?: boolean
+
+    /**
+     * 上传任务并发数 (同时进行的文件上传数量)
+     * 默认为 3
+     */
+    uploadConcurrency?: number
+
+    /**
+     * Hash 计算并发数 (同时进行的 Hash 计算任务数量)
+     * 默认为 3
+     */
+    hashConcurrency?: number
+
+    /**
+     * 切片上传并发数 (每个文件同时上传的切片数量)
+     * 默认为 3
+     */
+    chunkConcurrency?: number
 
     /**
      * RPC 模式 Hook：直接传函数，无需序列化
@@ -111,7 +128,7 @@ export interface SingleFileState {
     uid: string
     progress: number
     name: string
-    status: "idle" | "calculating" | "ready" | "checking" | "uploading" | "done" | "error" | "cancelled"
+    status: "idle" | "queued" | "calculating" | "ready" | "checking" | "uploading" | "done" | "error" | "cancelled"
     hash?: string
     errorMsg?: string
 }

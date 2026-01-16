@@ -31,7 +31,9 @@ const { startUpload, setUploadConfig, uploadMap, preCalculate, cancelUpload, rem
 | :------------------- | :-------------------------------------------------------------------------- | :------------ | :------- | :--------------------------------------------------- |
 | `serverUrl`          | 服务器基础地址。支持相对路径（如 `/api`）以适配 Proxy。                     | `string`      | 是       | -                                                    |
 | `apiPaths`           | 自定义各阶段的接口路径。                                                    | `ApiPaths`    | 否       | `{upload: '/upload_chunk', merge: '/upload_merge' }` |
-| `concurrency`        | 并发上传的切片数量。不建议设置过大，以免阻塞浏览器。                        | `number`      | 否       | `3`                                                  |
+| `chunkConcurrency`   | 并发上传的切片数量。不建议设置过大，以免阻塞浏览器。                        | `number`      | 否       | `3`                                                  |
+| `hashConcurrency`    | Hash 计算并发控制                        | `number`      | 否       | `3`                                                  |
+| `uploadConcurrency`  | 文件级并发控制，（`startUpload`并发 ）                       | `number`      | 否       | `3`                                                  |
 | `chunkSize`          | 单个切片的大小（字节）。                                                    | `number`      | 否       | `5 * 1024 * 1024` (5MB)                              |
 | `preventWindowClose` | 上传过程中是否拦截浏览器关闭/刷新。                                         | `boolean`     | 否       | `true`                                               |
 | `token`              | 如果需要，SDK 会自动将其添加到请求头的 `Authorization: Bearer {token}` 中。 | `string`      | 否       | -                                                    |

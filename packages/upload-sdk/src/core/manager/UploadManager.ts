@@ -14,15 +14,18 @@ import type {
 
 import workerCode from "../../worker/index?worker"
 import { formatError } from "@/utils"
+import { ConcurrencyController } from "@/utils/ConcurrencyController"
 
 // 默认配置
 const DEFAULT_CONFIG: UploadConfig = {
     serverUrl: "",
     chunkSize: 5 * 1024 * 1024,
-    concurrency: 3,
+    chunkConcurrency: 3,
     checkEnabled: true,
     preventWindowClose: true,
     showLog: false,
+    uploadConcurrency: 3,
+    hashConcurrency: 3,
     apiPaths: {
         check: "/upload_already",
         upload: "/upload_chunk",
@@ -35,7 +38,7 @@ class FlowControlException {
     constructor(
         public type: "success" | "fail",
         public payload: any
-    ) {}
+    ) { }
 }
 
 export class UploadManager {
@@ -72,7 +75,19 @@ export class UploadManager {
         }
     > = new Map()
 
+    // 【新增】并发控制器
+    private uploadConcurrencyController: ConcurrencyController<UploadSuccessResult>
+    private hashConcurrencyController: ConcurrencyController<string>
+
     private constructor() {
+        // 初始化并发控制器
+        this.uploadConcurrencyController = new ConcurrencyController<UploadSuccessResult>(
+            DEFAULT_CONFIG.uploadConcurrency
+        )
+        this.hashConcurrencyController = new ConcurrencyController<string>(
+            DEFAULT_CONFIG.hashConcurrency
+        )
+
         window.addEventListener("beforeunload", e => {
             if (!this.config.preventWindowClose) return
             const isUploading = Object.values(this.state).some(item => item.status === "uploading")
@@ -287,6 +302,14 @@ export class UploadManager {
             ...options,
             apiPaths: { ...this.config.apiPaths, ...options.apiPaths }
         }
+
+        // 同步更新并发控制器
+        if (options.uploadConcurrency !== undefined) {
+            this.uploadConcurrencyController.updateConcurrency(options.uploadConcurrency)
+        }
+        if (options.hashConcurrency !== undefined) {
+            this.hashConcurrencyController.updateConcurrency(options.hashConcurrency)
+        }
     }
 
     public subscribe(listener: UploadListener) {
@@ -298,96 +321,106 @@ export class UploadManager {
 
     /**
      * 【新增】纯计算 Hash 方法 (Pre-calculate)
-     * 使用独立的临时 Worker，不影响主流程
+     * 使用独立的临时 Worker,不影响主流程
      */
     public async computeHash(file: any): Promise<string> {
         const rawFile = file.originFileObj || file
         const uid = rawFile.uid || `${Date.now()}`
 
-        // 1. 如果已经算好了，直接返回
+        // 1. 如果已经算好了,直接返回
         const existing = this.state[uid]
         if (existing?.hash) return existing.hash
 
-        // 如果正在计算，直接返回正在跑的 Promise (复用)
+        // 如果正在计算,直接返回正在跑的 Promise (复用)
         if (this.pendingHashTasks.has(uid)) {
             return this.pendingHashTasks.get(uid)!
         }
 
-        // 2. 更新状态为 calculating
-        // 注意：这里我们只更新状态，不注册到 fileRegistry，因为这是纯计算任务
+        // 2. 先设置为 queued 状态
         this.updateFileState(uid, {
             uid,
             name: rawFile.name,
-            status: "calculating",
+            status: "queued",
             progress: 0
         })
 
-        const task = new Promise<string>((resolve, reject) => {
-            // 创建一个新的临时 Worker，用完即焚
-            const tempWorker = new Worker(this.getWorkerBlobUrl())
+        // 3. 通过并发控制器执行 Hash 计算
+        const task = this.hashConcurrencyController.run(async () => {
+            // 进入并发控制器后,更新状态为 calculating
+            this.updateFileState(uid, {
+                status: "calculating",
+                progress: 0
+            })
 
-            // 存入 Map
-            this.tempWorkerMap.set(uid, tempWorker)
+            return new Promise<string>((resolve, reject) => {
+                // 创建一个新的临时 Worker,用完即焚
+                const tempWorker = new Worker(this.getWorkerBlobUrl())
 
-            tempWorker.onmessage = e => {
-                const msg = e.data
+                // 存入 Map
+                this.tempWorkerMap.set(uid, tempWorker)
 
-                // 这里也做同样的类型收窄
-                if (msg.type === "log") return
+                tempWorker.onmessage = e => {
+                    const msg = e.data
 
-                switch (msg.type) {
-                    case "hash_progress":
-                        // 【关键】收到进度，更新状态
-                        this.updateFileState(uid, {
-                            status: "calculating",
-                            progress: msg.percent
-                        })
-                        break
+                    // 这里也做同样的类型收窄
+                    if (msg.type === "log") return
 
-                    case "hash_result":
-                        this.updateFileState(uid, {
-                            status: "ready",
-                            hash: msg.hash,
-                            progress: 100
-                        })
-                        tempWorker.terminate()
-                        resolve(msg.hash)
-                        this.pendingHashTasks.delete(uid)
-                        this.tempWorkerMap.delete(uid)
-                        break
+                    switch (msg.type) {
+                        case "hash_progress":
+                            // 【关键】收到进度,更新状态
+                            this.updateFileState(uid, {
+                                status: "calculating",
+                                progress: msg.percent
+                            })
+                            break
 
-                    case "error": {
-                        const errorMsg = formatError(msg.error)
-                        this.updateFileState(uid, { status: "error", errorMsg })
-                        tempWorker.terminate()
-                        reject(new Error(errorMsg))
-                        this.pendingHashTasks.delete(uid)
-                        this.tempWorkerMap.delete(uid)
-                        break
+                        case "hash_result":
+                            this.updateFileState(uid, {
+                                status: "ready",
+                                hash: msg.hash,
+                                progress: 100
+                            })
+                            tempWorker.terminate()
+                            resolve(msg.hash)
+                            this.tempWorkerMap.delete(uid)
+                            break
+
+                        case "error": {
+                            const errorMsg = formatError(msg.error)
+                            this.updateFileState(uid, { status: "error", errorMsg })
+                            tempWorker.terminate()
+                            reject(new Error(errorMsg))
+                            this.tempWorkerMap.delete(uid)
+                            break
+                        }
                     }
                 }
-            }
 
-            // 错误监听 (Worker 加载失败等)
-            tempWorker.onerror = event => {
-                const errorMsg = event instanceof ErrorEvent ? event.message : "Worker Init Failed"
+                // 错误监听 (Worker 加载失败等)
+                tempWorker.onerror = event => {
+                    const errorMsg = event instanceof ErrorEvent ? event.message : "Worker Init Failed"
 
-                this.updateFileState(uid, {
-                    status: "error",
-                    errorMsg: "Worker Init Failed"
-                })
-                tempWorker.terminate()
+                    this.updateFileState(uid, {
+                        status: "error",
+                        errorMsg: "Worker Init Failed"
+                    })
+                    tempWorker.terminate()
 
-                reject(new Error(errorMsg))
-                this.pendingHashTasks.delete(uid)
-                this.tempWorkerMap.delete(uid)
-            }
+                    reject(new Error(errorMsg))
+                    this.tempWorkerMap.delete(uid)
+                }
 
-            // 发送指令: 只算 Hash
-            tempWorker.postMessage({ type: "only_hash", file: rawFile, uid })
+                // 发送指令: 只算 Hash
+                tempWorker.postMessage({ type: "only_hash", file: rawFile, uid })
+            })
         })
 
         this.pendingHashTasks.set(uid, task)
+
+        // 任务完成后清理
+        task.finally(() => {
+            this.pendingHashTasks.delete(uid)
+        })
 
         return task
     }
@@ -522,7 +555,7 @@ export class UploadManager {
         const rawFile = file.originFileObj ? file.originFileObj : file
         const uid = rawFile.uid || `${Date.now()}`
 
-        // 如果 promiseMap 中存在该 UID，说明上一次的 startUpload 还没结束（Done/Error/Cancel 都会清理 Map）
+        // 如果 promiseMap 中存在该 UID,说明上一次的 startUpload 还没结束(Done/Error/Cancel 都会清理 Map)
         if (this.promiseMap.has(uid)) {
             throw {
                 status: "error",
@@ -534,121 +567,127 @@ export class UploadManager {
         }
 
         // 2. 【关键修复】移出忽略名单
-        // 如果该文件之前被取消过，UID 会在忽略名单里。
-        // 这里必须移除，否则新启动的任务发来的 Worker 消息会被 Manager 丢弃，导致进度条不动。
+        // 如果该文件之前被取消过,UID 会在忽略名单里。
+        // 这里必须移除,否则新启动的任务发来的 Worker 消息会被 Manager 丢弃,导致进度条不动。
         this.ignoringUIDs.delete(uid)
 
         // 3. 注册文件引用 (供 RPC 钩子读取)
         this.fileRegistry.set(uid, rawFile)
 
-        // ============================================================
-        // 4. 智能初始化状态 (解决进度闪烁/回跳问题)
-        // ============================================================
-        const currentState = this.state[uid]
+        // 4. 应用临时配置
+        if (customOptions) this.setConfig(customOptions)
 
-        // 判断依据：
-        // ready: 表示 Hash 已经算好，下一步就是发请求
-        // calculating: 表示正在预计算中
-        const isReady = currentState?.status === "ready"
-        const isCalculating = currentState?.status === "calculating"
-
-        // 决定初始状态：
-        // - 如果 Ready -> 设为 'checking' (表示正在进行 Init/Check 阶段，连接服务器)
-        // - 否则 -> 设为 'calculating' (表示需要计算 Hash)
-        const initialStatus = isReady ? "checking" : "calculating"
-
-        // 决定初始进度：
-        // - 如果 Ready -> 归 0 (准备开始上传流程)
-        // - 如果正在算 -> 继承当前进度 (比如 50%)，防止 UI 闪回 0
-        const initialProgress = isReady ? 0 : isCalculating ? currentState?.progress || 0 : 0
-
-        // 更新 UI
+        // 5. 先设置为 queued 状态
         this.updateFileState(uid, {
             uid,
             name: rawFile.name,
-            status: initialStatus,
-            progress: initialProgress
+            status: "queued",
+            progress: 0
         })
 
-        // ============================================================
-        // 5. 配置与路径处理
-        // ============================================================
+        // 6. 通过并发控制器执行上传任务
+        return this.uploadConcurrencyController.run(async () => {
+            // ============================================================
+            // 进入并发控制器后,开始实际的上传流程
+            // ============================================================
 
-        // 应用临时配置
-        if (customOptions) this.setConfig(customOptions)
+            const currentState = this.state[uid]
 
-        // 处理 serverUrl 相对路径 (适配开发环境 Proxy)
-        // 将 "/api" 转换为 "http://localhost:3000/api"
-        let finalServerUrl = this.config.serverUrl
-        if (finalServerUrl && !finalServerUrl.startsWith("http")) {
-            finalServerUrl = new URL(finalServerUrl, window.location.origin).href
-        }
+            // 判断依据:
+            // ready: 表示 Hash 已经算好,下一步就是发请求
+            // calculating: 表示正在预计算中
+            const isReady = currentState?.status === "ready"
+            const isCalculating = currentState?.status === "calculating"
 
-        // ============================================================
-        // 6. 等待 Hash 策略 (解决重复计算问题)
-        // ============================================================
+            // 决定初始状态:
+            // - 如果 Ready -> 设为 'checking' (表示正在进行 Init/Check 阶段,连接服务器)
+            // - 否则 -> 设为 'calculating' (表示需要计算 Hash)
+            const initialStatus = isReady ? "checking" : "calculating"
 
-        // 尝试获取已有的 Hash
-        let preCalculatedHash = this.state[uid]?.hash
+            // 决定初始进度:
+            // - 如果 Ready -> 归 0 (准备开始上传流程)
+            // - 如果正在算 -> 继承当前进度 (比如 50%),防止 UI 闪回 0
+            const initialProgress = isReady ? 0 : isCalculating ? currentState?.progress || 0 : 0
 
-        // 如果没有 Hash，但发现有一个正在计算的任务 (preCalculate 正在跑)
-        if (!preCalculatedHash && this.pendingHashTasks.has(uid)) {
-            try {
-                // 【核心】在这里“搭便车”，等待预计算 Worker 完成
-                // 此时 UI 进度条由那个临时 Worker 驱动
-                preCalculatedHash = await this.pendingHashTasks.get(uid)
-            } catch (err) {
-                // 如果预计算挂了 (比如文件读取失败)，直接终止本次上传
-                this.cleanup(uid)
-                this.updateFileState(uid, {
-                    status: "error",
-                    errorMsg: "Pre-calculation Failed"
-                })
+            // 更新 UI
+            this.updateFileState(uid, {
+                status: initialStatus,
+                progress: initialProgress
+            })
 
-                // 抛出错误，让外层 await startUpload 捕获
-                throw {
-                    status: "error",
-                    uid,
-                    file: rawFile,
-                    error: err instanceof Error ? err : new Error(String(err))
-                } as UploadErrorResult
+            // 处理 serverUrl 相对路径 (适配开发环境 Proxy)
+            // 将 "/api" 转换为 "http://localhost:3000/api"
+            let finalServerUrl = this.config.serverUrl
+            if (finalServerUrl && !finalServerUrl.startsWith("http")) {
+                finalServerUrl = new URL(finalServerUrl, window.location.origin).href
             }
-        }
 
-        // ============================================================
-        // 7. 启动主流程 (返回 Promise)
-        // ============================================================
+            // ============================================================
+            // 等待 Hash 策略 (解决重复计算问题)
+            // ============================================================
 
-        return new Promise<UploadSuccessResult>((resolve, reject) => {
-            // 注册 Promise 句柄，等待 Worker 发回 'done' 或 'error' 消息
-            // 这里的 resolve/reject 会在 onmessage 中被调用
-            this.promiseMap.set(uid, { resolve, reject })
+            // 尝试获取已有的 Hash
+            let preCalculatedHash = this.state[uid]?.hash
 
-            // 获取或创建主 Worker
-            const worker = this.initWorker()
+            // 如果没有 Hash,但发现有一个正在计算的任务 (preCalculate 正在跑)
+            if (!preCalculatedHash && this.pendingHashTasks.has(uid)) {
+                try {
+                    // 【核心】在这里"搭便车",等待预计算 Worker 完成
+                    // 此时 UI 进度条由那个临时 Worker 驱动
+                    preCalculatedHash = await this.pendingHashTasks.get(uid)
+                } catch (err) {
+                    // 如果预计算挂了 (比如文件读取失败),直接终止本次上传
+                    this.cleanup(uid)
+                    this.updateFileState(uid, {
+                        status: "error",
+                        errorMsg: "Pre-calculation Failed"
+                    })
 
-            // 构造初始化 Payload
-            const payload: WorkerInitPayload = {
-                type: "init",
-                uid,
-                file: rawFile,
-                config: {
-                    serverUrl: finalServerUrl,
-                    chunkSize: this.config.chunkSize,
-                    concurrency: this.config.concurrency,
-                    token: this.config.token,
-                    // checkEnabled: this.config.checkEnabled, // 暂不支持
-                    apiPaths: this.config.apiPaths,
-                    showLog: this.config.showLog,
-
-                    // 【关键】将 Hash 传给 Worker
-                    // Worker 收到这个值后，会直接跳过内部的计算步骤，直接进入 Upload
-                    hash: preCalculatedHash
+                    // 抛出错误,让外层 await startUpload 捕获
+                    throw {
+                        status: "error",
+                        uid,
+                        file: rawFile,
+                        error: err instanceof Error ? err : new Error(String(err))
+                    } as UploadErrorResult
                 }
             }
 
-            // 发送指令
-            worker.postMessage(payload)
+            // ============================================================
+            // 启动主流程 (返回 Promise)
+            // ============================================================
+
+            return new Promise<UploadSuccessResult>((resolve, reject) => {
+                // 注册 Promise 句柄,等待 Worker 发回 'done' 或 'error' 消息
+                // 这里的 resolve/reject 会在 onmessage 中被调用
+                this.promiseMap.set(uid, { resolve, reject })
+
+                // 获取或创建主 Worker
+                const worker = this.initWorker()
+
+                // 构造初始化 Payload
+                const payload: WorkerInitPayload = {
+                    type: "init",
+                    uid,
+                    file: rawFile,
+                    config: {
+                        serverUrl: finalServerUrl,
+                        chunkSize: this.config.chunkSize,
+                        chunkConcurrency: this.config.chunkConcurrency,
+                        token: this.config.token,
+                        // checkEnabled: this.config.checkEnabled, // 暂不支持
+                        apiPaths: this.config.apiPaths,
+                        showLog: this.config.showLog,
+
+                        // 【关键】将 Hash 传给 Worker
+                        // Worker 收到这个值后,会直接跳过内部的计算步骤,直接进入 Upload
+                        hash: preCalculatedHash
+                    }
+                }
+
+                // 发送指令
+                worker.postMessage(payload)
+            })
         })
     }
 }

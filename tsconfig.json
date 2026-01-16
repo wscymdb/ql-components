@@ -13,6 +13,7 @@
         "strict": true,
         "experimentalDecorators": true,
         "moduleResolution": "node",
+        "noEmit": true
     },
     "$schema": "https://json.schemastore.org/tsconfig",
     "display": "Base",
