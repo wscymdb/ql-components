@@ -1,21 +1,6 @@
 ---
-title: A static site based on dumi
+title: 趣链组件文档站
 hero:
-    title: Site
+    title: AMAZED
     description: 组件文档站
-    actions:
-        - text: Hello
-          link: /
-        - text: World
-          link: /
-features:
-    - title: Hello
-      emoji: 💎
-      description: Put hello description here
-    - title: World
-      emoji: 🌈
-      description: Put world description here
-    - title: "!"
-      emoji: 🚀
-      description: Put ! description here
 ---

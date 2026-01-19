@@ -2,7 +2,9 @@ import { defineConfig } from "dumi"
 
 export default defineConfig({
     themeConfig: {
-        name: "文档"
+        name: "",
+        logo: "/logo.svg",
+        footer: false
     },
     publicPath: "/",
     proxy: {
