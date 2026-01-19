@@ -1,5 +1,17 @@
 # @ql-react-components/upload-sdk
 
+## 0.8.0
+
+### Minor Changes
+
+- 1.新增 initialize() 方法用于初始化配置(只能调用一次)
+- 2.新增 updateConfig() 方法用于动态更新配置(不能修改 serverUrl)
+- 3.移除 setCoig() 方法
+- 4.startUpload 支持单文件配置(hooks, apiPaths)
+- 5.新增 queued 状态用于并发队列管理
+- 6.更新所有文档和示例代码
+- 7.添加并发控制
+
 ## 0.7.2
 
 ### Patch Changes
