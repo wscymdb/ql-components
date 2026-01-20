@@ -11,11 +11,11 @@ import { UploadOutlined } from "@ant-design/icons"
  */
 
 const BigFileUpload = () => {
-    const { startUpload, initialize } = useUpload()
+    const { startUpload, setup } = useUpload()
     const fileListRef = useRef<any[]>([])
 
     useEffect(() => {
-        initialize({
+        setup({
             serverUrl: "/api"
         })
         // eslint-disable-next-line react-hooks/exhaustive-deps

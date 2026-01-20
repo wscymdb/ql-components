@@ -7,50 +7,31 @@
 React 核心 Hook，用于获取上传状态和控制方法。
 
 ```tsx | pure
-const {
-    startUpload,
-    initialize,
-    updateConfig,
-    uploadMap,
-    preCalculate,
-    cancelUpload,
-    removeFile,
-    reset,
-    getFileState
-} = useUpload()
+const { startUpload, setup, uploadMap, preCalculate, cancelUpload, removeFile, reset, getFileState } = useUpload()
 ```
 
 #### 返回值
 
-| 属性           | 说明                                                                             | 类型                                                                         |
-| :------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
-| `initialize`   | 初始化配置。必须在第一次上传前调用,重复调用只警告不生效。                        | `(config: InitializeConfig) => void`                                         |
-| `updateConfig` | 更新配置。可多次调用,但不能修改 serverUrl。                                      | `(config: UpdateConfig) => void`                                             |
-| `startUpload`  | 触发上传的核心方法。支持单文件配置。                                             | `(file: File, options?: StartUploadOptions) => Promise<UploadSuccessResult>` |
-| `preCalculate` | 提前触发 Hash 计算。计算完成后状态变为 `ready`,再次调用 startUpload 可秒进上传。 | `(files: File[]) => void`                                                    |
-| `cancelUpload` | 取消上传或计算任务。文件状态变为 `cancelled`,保留在列表中,可重试。               | `(fileOrUid: File \| string) => void`                                        |
-| `removeFile`   | 取消任务并从 `uploadMap` 中彻底移除文件记录。                                    | `(fileOrUid: File \| string) => void`                                        |
-| `reset`        | 重置 SDK。终止所有任务,清空所有状态。常用于关闭弹窗时清理资源。                  | `() => void`                                                                 |
-| `uploadMap`    | 当前所有文件的上传状态快照。Key 为文件 `uid`。                                   | `Record<string, SingleFileState>`                                            |
-| `getFileState` | 获取指定 UID 文件的状态(安全访问,若不存在返回默认空状态)。                       | `(uid: string) => SingleFileState`                                           |
+| 属性           | 说明                                                                                                              | 类型                                                                         |
+| :------------- | :---------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| `setup`        | 配置上传管理器。第一次调用时完整初始化，后续调用可以更新除 serverUrl 外的所有配置。hooks 和 apiPaths 会深度合并。 | `(config: SetupConfig) => void`                                              |
+| `startUpload`  | 触发上传的核心方法。支持单文件配置。                                                                              | `(file: File, options?: StartUploadOptions) => Promise<UploadSuccessResult>` |
+| `preCalculate` | 提前触发 Hash 计算。计算完成后状态变为 `ready`,再次调用 startUpload 可秒进上传。                                  | `(files: File[]) => void`                                                    |
+| `cancelUpload` | 取消上传或计算任务。文件状态变为 `cancelled`,保留在列表中,可重试。                                                | `(fileOrUid: File \| string) => void`                                        |
+| `removeFile`   | 取消任务并从 `uploadMap` 中彻底移除文件记录。                                                                     | `(fileOrUid: File \| string) => void`                                        |
+| `reset`        | 重置 SDK。终止所有任务,清空所有状态。常用于关闭弹窗时清理资源。                                                   | `() => void`                                                                 |
+| `uploadMap`    | 当前所有文件的上传状态快照。Key 为文件 `uid`。                                                                    | `Record<string, SingleFileState>`                                            |
+| `getFileState` | 获取指定 UID 文件的状态(安全访问,若不存在返回默认空状态)。                                                        | `(uid: string) => SingleFileState`                                           |
 
-### InitializeConfig
+### SetupConfig
 
-初始化配置对象，用于 `initialize()` 方法。与 `UploadConfig` 类型相同。
+配置对象，用于 `setup()` 方法。与 `UploadConfig` 类型相同。
 
-> **注意:** 必须在第一次上传前调用 `initialize()`，重复调用只会警告不会生效。
-
-### UpdateConfig
-
-更新配置对象，用于 `updateConfig()` 方法。可以修改除 `serverUrl` 外的所有配置。
-
-```typescript | pure
-type UpdateConfig = Partial<Omit<UploadConfig, "serverUrl">>
-```
+> **注意:** 第一次调用 `setup()` 时会完整初始化所有配置（必须设置 serverUrl），后续调用可以更新除 serverUrl 外的所有配置。hooks 和 apiPaths 会深度合并，不会覆盖未指定的字段。
 
 ### UploadConfig
 
-完整的配置对象定义(内部使用，对外通过 `InitializeConfig` 和 `UpdateConfig` 暴露)
+完整的配置对象定义(内部使用，对外通过 `SetupConfig` 暴露)
 
 | 属性                 | 说明                                                                        | 类型          | 是否必填 | 默认值                                               |
 | :------------------- | :-------------------------------------------------------------------------- | :------------ | :------- | :--------------------------------------------------- |

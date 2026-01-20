@@ -6,11 +6,11 @@ import type { UploadFile } from "antd/es/upload/interface"
 
 const ErrorHandleDemo = () => {
     // 1. 记得解构出 uploadMap 以展示 UI
-    const { startUpload, initialize, uploadMap } = useUpload()
+    const { startUpload, setup, uploadMap } = useUpload()
     const [fileList, setFileList] = useState<UploadFile[]>([])
 
     useEffect(() => {
-        initialize({
+        setup({
             serverUrl: "/api",
             hooks: {
                 // 前端模拟业务错误拦截

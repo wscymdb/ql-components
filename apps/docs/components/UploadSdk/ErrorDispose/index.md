@@ -9,7 +9,7 @@ SDK 内部的 Worker 仅根据 HTTP 状态码（200-299）判断请求是否成�
 你需要配置 `validateResponse` 钩子，并使用 **`ctx.fail(message)`** 来优雅地中断上传。
 
 ```tsx | pure
-initialize({
+setup({
     hooks: {
         validateResponse: ctx => {
             // 假设后端规范：code !== 0 即为失败

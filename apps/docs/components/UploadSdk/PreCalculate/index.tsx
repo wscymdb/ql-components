@@ -5,14 +5,14 @@ import { UploadOutlined } from "@ant-design/icons"
 
 const BigFileUpload = () => {
     const [fileList, setFileList] = useState<any[]>([])
-    const { uploadMap, initialize, preCalculate, startUpload } = useUpload()
+    const { uploadMap, setup, preCalculate, startUpload } = useUpload()
 
     useEffect(() => {
         console.log(uploadMap)
     }, [uploadMap])
 
     useEffect(() => {
-        initialize({
+        setup({
             showLog: true,
             serverUrl: "/api"
         })

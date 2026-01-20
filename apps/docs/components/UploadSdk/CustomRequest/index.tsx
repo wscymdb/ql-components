@@ -15,10 +15,10 @@ const BigFileUpload = () => {
     const { startUpload } = useUpload()
     const fileListRef = useRef<any[]>([])
 
-    const { initialize } = useUpload()
+    const { setup } = useUpload()
 
     useEffect(() => {
-        initialize({
+        setup({
             serverUrl: "/api1",
             hooks: {
                 async init(_ctx) {

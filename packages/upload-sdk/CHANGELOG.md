@@ -1,5 +1,17 @@
 # @ql-react-components/upload-sdk
 
+## 0.9.0
+
+### Minor Changes
+
+- **Breaking Change**: 移除 `initialize()` 和 `updateConfig()` 方法，统一使用 `setup()` 方法
+    - `setup()` 支持重复调用，解决 React Hooks 闭包陷阱问题
+    - 第一次调用时完整初始化所有配置（必须设置 serverUrl）
+    - 后续调用可以更新除 `serverUrl` 外的所有配置
+    - `hooks` 和 `apiPaths` 会深度合并，不会覆盖未指定的字段
+    - 移除内部 `initialized` 标记，通过 `serverUrl` 判断是否已初始化
+- 更新所有文档和示例代码
+
 ## 0.8.1
 
 ### Patch Changes

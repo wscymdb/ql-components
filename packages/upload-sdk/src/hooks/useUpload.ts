@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { UploadManager } from "@/core"
 import { UploadBatchError } from "@/utils"
-import type { GlobalUploadState, SingleFileState, InitializeConfig, UpdateConfig } from "@/types"
+import type { GlobalUploadState, SingleFileState, SetupConfig } from "@/types"
 
 const manager = UploadManager.getInstance()
 
@@ -131,17 +131,13 @@ export const useUpload = () => {
     )
 
     /**
-     * 初始化配置
+     * 配置上传管理器
+     * - 第一次调用：完整初始化所有配置（必须设置 serverUrl）
+     * - 后续调用：可以更新除 serverUrl 外的所有配置
+     * - hooks 和 apiPaths 会进行深度合并
      */
-    const initialize = useCallback((config: InitializeConfig) => {
-        manager.initialize(config)
-    }, [])
-
-    /**
-     * 更新配置
-     */
-    const updateConfig = useCallback((config: UpdateConfig) => {
-        manager.updateConfig(config)
+    const setup = useCallback((config: SetupConfig) => {
+        manager.setup(config)
     }, [])
 
     /**
@@ -208,10 +204,8 @@ export const useUpload = () => {
         startUpload,
         /** 获取单文件状态 helper */
         getFileState,
-        /** 初始化配置 */
-        initialize,
-        /** 更新配置 */
-        updateConfig,
+        /** 配置上传管理器 */
+        setup,
         /** 预计算 Hash helper */
         preCalculate
     }

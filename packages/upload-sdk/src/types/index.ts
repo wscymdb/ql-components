@@ -211,19 +211,27 @@ export type UploadResult = UploadSuccessResult | UploadErrorResult | UploadCance
  */
 
 /**
- * 初始化配置(与 UploadConfig 相同)
+ * Setup 配置(与 UploadConfig 相同)
+ * - 第一次调用：完整初始化所有配置
+ * - 后续调用：只更新 hooks 和 token
+ */
+export type SetupConfig = UploadConfig
+
+/**
+ * 初始化配置(已废弃，请使用 SetupConfig)
+ * @deprecated 使用 SetupConfig 代替
  */
 export type InitializeConfig = UploadConfig
 
 /**
  * 更新配置(不能修改 serverUrl)
  */
-export type UpdateConfig = Partial<Omit<UploadConfig, 'serverUrl'>>
+export type UpdateConfig = Partial<Omit<UploadConfig, "serverUrl">>
 
 /**
  * 单文件上传配置
  */
 export interface StartUploadOptions {
-    hooks?: UploadConfig['hooks']
-    apiPaths?: UploadConfig['apiPaths']
+    hooks?: UploadConfig["hooks"]
+    apiPaths?: UploadConfig["apiPaths"]
 }

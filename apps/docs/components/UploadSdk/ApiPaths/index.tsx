@@ -1,3 +1,4 @@
+import React from "react"
 import { Button, message, Upload, UploadProps } from "antd"
 import { useEffect, useRef } from "react"
 import { useUpload } from "@ql-react-components/upload-sdk"
@@ -7,10 +8,10 @@ const BigFileUpload = () => {
     const { startUpload } = useUpload()
     const fileListRef = useRef<any[]>([])
 
-    const { initialize } = useUpload()
+    const { setup } = useUpload()
 
     useEffect(() => {
-        initialize({
+        setup({
             serverUrl: "/api",
             apiPaths: {
                 upload: "/upload",

@@ -9,7 +9,7 @@ SDK 提供了三层并发控制机制,确保在大量文件上传时不会压垮
 控制同时上传的文件数量。
 
 ```typescript
-initialize({
+setup({
     serverUrl: "/api",
     uploadConcurrency: 3 // 最多同时上传 3 个文件
 })
@@ -26,7 +26,7 @@ initialize({
 控制同时进行 Hash 计算的文件数量。
 
 ```typescript
-initialize({
+setup({
     serverUrl: "/api",
     hashConcurrency: 3 // 最多同时计算 3 个文件的 Hash
 })
@@ -42,7 +42,7 @@ initialize({
 控制单个文件内部同时上传的切片数量。
 
 ```typescript
-initialize({
+setup({
     serverUrl: "/api",
     chunkConcurrency: 5 // 每个文件最多同时上传 5 个切片
 })
@@ -59,7 +59,7 @@ initialize({
 const { initialize } = useUpload()
 
 useEffect(() => {
-    initialize({
+    setup({
         serverUrl: "/api",
         uploadConcurrency: 3, // 同时上传 3 个文件
         hashConcurrency: 3, // 同时计算 3 个 Hash

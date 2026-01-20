@@ -5,11 +5,11 @@ import { UploadOutlined, FileOutlined } from "@ant-design/icons"
 import type { UploadFile } from "antd/es/upload/interface"
 
 const ConcurrencyDemo = () => {
-    const { startUpload, initialize, uploadMap } = useUpload()
+    const { startUpload, setup, uploadMap } = useUpload()
     const [fileList, setFileList] = useState<UploadFile[]>([])
 
     useEffect(() => {
-        initialize({
+        setup({
             serverUrl: "/api",
             uploadConcurrency: 2, // 同时上传 2 个文件
             hashConcurrency: 2, // 同时计算 2 个 Hash

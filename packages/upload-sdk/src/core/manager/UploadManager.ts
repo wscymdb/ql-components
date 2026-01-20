@@ -10,8 +10,7 @@ import type {
     SingleFileState,
     UploadSuccessResult,
     UploadErrorResult,
-    InitializeConfig,
-    UpdateConfig,
+    SetupConfig,
     StartUploadOptions
 } from "@/types"
 
@@ -48,10 +47,7 @@ export class UploadManager {
     private worker: Worker | null = null
     private listeners: UploadListener[] = []
     private state: GlobalUploadState = {}
-    private config!: UploadConfig // 移除默认值,等待 initialize 设置
-
-    // 【新增】初始化状态标记
-    private initialized = false
+    private config!: UploadConfig // 移除默认值,等待 setup 设置
 
     // 【新增】存储临时 Hash Worker：UID -> Worker
     private tempWorkerMap: Map<string, Worker> = new Map()
@@ -296,19 +292,47 @@ export class UploadManager {
     }
 
     /**
-     * 初始化上传管理器
-     * - 必须在第一次上传前调用
-     * - 重复调用只警告,不生效
+     * 配置上传管理器
+     * - 第一次调用：完整初始化所有配置（必须设置 serverUrl）
+     * - 后续调用：可以更新除 serverUrl 外的所有配置
+     * - hooks 和 apiPaths 会进行深度合并，不会覆盖未指定的字段
      *
-     * @param config 初始化配置
+     * @param config 配置对象
      */
-    public initialize(config: InitializeConfig): void {
-        if (this.initialized) {
-            console.warn("[UploadManager] Already initialized, config ignored")
+    public setup(config: SetupConfig): void {
+        // 判断是否已经初始化过（通过 serverUrl 是否存在）
+        const isInitialized = !!this.config?.serverUrl
+
+        if (isInitialized) {
+            // 已初始化，检查是否尝试修改 serverUrl
+            if (config.serverUrl && config.serverUrl !== this.config.serverUrl) {
+                console.error(
+                    `[UploadManager] Cannot change serverUrl after initialization. ` +
+                        `Current: ${this.config.serverUrl}, New: ${config.serverUrl}`
+                )
+                return
+            }
+
+            // 合并配置（深度合并 hooks 和 apiPaths）
+            this.config = {
+                ...this.config,
+                ...config,
+                hooks: { ...this.config.hooks, ...config.hooks },
+                apiPaths: { ...this.config.apiPaths, ...config.apiPaths }
+            } as UploadConfig
+
+            // 同步并发控制器
+            if (config.uploadConcurrency !== undefined) {
+                this.uploadConcurrencyController.updateConcurrency(config.uploadConcurrency)
+            }
+            if (config.hashConcurrency !== undefined) {
+                this.hashConcurrencyController.updateConcurrency(config.hashConcurrency)
+            }
+
             return
         }
 
-        // 合并默认配置
+        // 第一次调用：完整初始化
         this.config = {
             ...DEFAULT_CONFIG,
             ...config
@@ -319,32 +343,6 @@ export class UploadManager {
             this.config.uploadConcurrency!
         )
         this.hashConcurrencyController = new ConcurrencyController<string>(this.config.hashConcurrency!)
-
-        this.initialized = true
-    }
-
-    /**
-     * 更新配置
-     * - 可以多次调用
-     * - 不能修改 serverUrl
-     *
-     * @param config 要更新的配置项
-     */
-    public updateConfig(config: UpdateConfig): void {
-        if (!this.initialized) {
-            console.warn("[UploadManager] Not initialized, please call initialize() first")
-            return
-        }
-
-        this.config = { ...this.config, ...config }
-
-        // 同步并发控制器
-        if (config.uploadConcurrency !== undefined) {
-            this.uploadConcurrencyController.updateConcurrency(config.uploadConcurrency)
-        }
-        if (config.hashConcurrency !== undefined) {
-            this.hashConcurrencyController.updateConcurrency(config.hashConcurrency)
-        }
     }
 
     public subscribe(listener: UploadListener) {
@@ -579,8 +577,8 @@ export class UploadManager {
      */
     public async startUpload(file: any, options?: StartUploadOptions): Promise<UploadSuccessResult> {
         // 1. 检查是否已初始化
-        if (!this.initialized) {
-            throw new Error("[UploadManager] Not initialized, please call initialize() first")
+        if (!this.config?.serverUrl) {
+            throw new Error("[UploadManager] Not initialized, please call setup() first")
         }
 
         // 2. 提取原始文件对象和 UID
