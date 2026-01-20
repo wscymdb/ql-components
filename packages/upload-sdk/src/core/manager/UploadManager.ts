@@ -40,7 +40,7 @@ class FlowControlException {
     constructor(
         public type: "success" | "fail",
         public payload: any
-    ) { }
+    ) {}
 }
 
 export class UploadManager {
@@ -48,8 +48,8 @@ export class UploadManager {
     private worker: Worker | null = null
     private listeners: UploadListener[] = []
     private state: GlobalUploadState = {}
-    private config!: UploadConfig  // 移除默认值,等待 initialize 设置
-    
+    private config!: UploadConfig // 移除默认值,等待 initialize 设置
+
     // 【新增】初始化状态标记
     private initialized = false
 
@@ -86,7 +86,7 @@ export class UploadManager {
 
     private constructor() {
         // 移除并发控制器初始化,改到 initialize 中
-        
+
         window.addEventListener("beforeunload", e => {
             if (!this.config?.preventWindowClose) return
             const isUploading = Object.values(this.state).some(item => item.status === "uploading")
@@ -299,29 +299,27 @@ export class UploadManager {
      * 初始化上传管理器
      * - 必须在第一次上传前调用
      * - 重复调用只警告,不生效
-     * 
+     *
      * @param config 初始化配置
      */
     public initialize(config: InitializeConfig): void {
         if (this.initialized) {
-            console.warn('[UploadManager] Already initialized, config ignored')
+            console.warn("[UploadManager] Already initialized, config ignored")
             return
         }
-        
+
         // 合并默认配置
         this.config = {
             ...DEFAULT_CONFIG,
             ...config
         } as UploadConfig
-        
+
         // 初始化并发控制器
         this.uploadConcurrencyController = new ConcurrencyController<UploadSuccessResult>(
             this.config.uploadConcurrency!
         )
-        this.hashConcurrencyController = new ConcurrencyController<string>(
-            this.config.hashConcurrency!
-        )
-        
+        this.hashConcurrencyController = new ConcurrencyController<string>(this.config.hashConcurrency!)
+
         this.initialized = true
     }
 
@@ -329,17 +327,17 @@ export class UploadManager {
      * 更新配置
      * - 可以多次调用
      * - 不能修改 serverUrl
-     * 
+     *
      * @param config 要更新的配置项
      */
     public updateConfig(config: UpdateConfig): void {
         if (!this.initialized) {
-            console.warn('[UploadManager] Not initialized, please call initialize() first')
+            console.warn("[UploadManager] Not initialized, please call initialize() first")
             return
         }
-        
+
         this.config = { ...this.config, ...config }
-        
+
         // 同步并发控制器
         if (config.uploadConcurrency !== undefined) {
             this.uploadConcurrencyController.updateConcurrency(config.uploadConcurrency)
@@ -582,9 +580,9 @@ export class UploadManager {
     public async startUpload(file: any, options?: StartUploadOptions): Promise<UploadSuccessResult> {
         // 1. 检查是否已初始化
         if (!this.initialized) {
-            throw new Error('[UploadManager] Not initialized, please call initialize() first')
+            throw new Error("[UploadManager] Not initialized, please call initialize() first")
         }
-        
+
         // 2. 提取原始文件对象和 UID
         const rawFile = file.originFileObj ? file.originFileObj : file
         const uid = rawFile.uid || `${Date.now()}`
@@ -619,37 +617,13 @@ export class UploadManager {
             // ============================================================
             // 进入并发控制器后,开始实际的上传流程
             // ============================================================
-            
+
             // 合并配置(不修改 this.config)
             const finalConfig = {
                 ...this.config,
                 hooks: { ...this.config.hooks, ...options?.hooks },
                 apiPaths: { ...this.config.apiPaths, ...options?.apiPaths }
             }
-
-            const currentState = this.state[uid]
-
-            // 判断依据:
-            // ready: 表示 Hash 已经算好,下一步就是发请求
-            // calculating: 表示正在预计算中
-            const isReady = currentState?.status === "ready"
-            const isCalculating = currentState?.status === "calculating"
-
-            // 决定初始状态:
-            // - 如果 Ready -> 设为 'checking' (表示正在进行 Init/Check 阶段,连接服务器)
-            // - 否则 -> 设为 'calculating' (表示需要计算 Hash)
-            const initialStatus = isReady ? "checking" : "calculating"
-
-            // 决定初始进度:
-            // - 如果 Ready -> 归 0 (准备开始上传流程)
-            // - 如果正在算 -> 继承当前进度 (比如 50%),防止 UI 闪回 0
-            const initialProgress = isReady ? 0 : isCalculating ? currentState?.progress || 0 : 0
-
-            // 更新 UI
-            this.updateFileState(uid, {
-                status: initialStatus,
-                progress: initialProgress
-            })
 
             // 处理 serverUrl 相对路径 (适配开发环境 Proxy)
             // 将 "/api" 转换为 "http://localhost:3000/api"
@@ -688,6 +662,33 @@ export class UploadManager {
                     } as UploadErrorResult
                 }
             }
+
+            // ============================================================
+            // 决定初始状态 (在等待 Hash 完成之后)
+            // ============================================================
+
+            const currentState = this.state[uid]
+
+            // 判断依据:
+            // ready: 表示 Hash 已经算好,下一步就是发请求
+            // 如果有 preCalculatedHash,说明 Hash 已经完成(无论是预计算还是刚刚等待完成)
+            const isReady = currentState?.status === "ready" || !!preCalculatedHash
+
+            // 决定初始状态:
+            // - 如果 Ready -> 设为 'checking' (表示正在进行 Init/Check 阶段,连接服务器)
+            // - 否则 -> 设为 'calculating' (表示需要计算 Hash)
+            const initialStatus = isReady ? "checking" : "calculating"
+
+            // 决定初始进度:
+            // - 如果 Ready -> 归 0 (准备开始上传流程)
+            // - 否则 -> 归 0 (准备开始计算)
+            const initialProgress = isReady ? 0 : 0
+
+            // 更新 UI
+            this.updateFileState(uid, {
+                status: initialStatus,
+                progress: initialProgress
+            })
 
             // ============================================================
             // 启动主流程 (返回 Promise)

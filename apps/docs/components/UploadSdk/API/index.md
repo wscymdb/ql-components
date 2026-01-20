@@ -153,7 +153,7 @@ await startUpload(file2, {
 | :--------- | :------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------- |
 | `uid`      | 文件唯一标识                                                                          | `string`                                                                                                          |
 | `name`     | 文件名                                                                                | `string`                                                                                                          |
-| `status`   | 当前状态                                                                              | `'idle' \| 'queued' \| 'calculating' \| 'ready' \| 'checking' \| 'uploading' \| 'done' \| 'error' \| 'cancelled'` |
+| `status`   | 当前状态 [状态详览](/upload/status)                                                   | `'idle' \| 'queued' \| 'calculating' \| 'ready' \| 'checking' \| 'uploading' \| 'done' \| 'error' \| 'cancelled'` |
 | `progress` | 进度百分比 (0-100)。在 calculating 状态下代表计算进度，uploading 状态下代表上传进度。 | `number`                                                                                                          |
 | `hash`     | 文件 Hash (status 为 ready, checking, uploading, done 时存在)                         | `string`                                                                                                          |
 | `errorMsg` | 错误信息 (状态为 error 时存在)                                                        | `string`                                                                                                          |
@@ -195,4 +195,3 @@ type UploadResult =
           error?: Error
       }
 ```
-

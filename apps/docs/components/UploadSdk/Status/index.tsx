@@ -7,7 +7,8 @@ import {
     StopOutlined,
     CloudUploadOutlined,
     ScanOutlined,
-    ApiOutlined
+    ApiOutlined,
+    ClockCircleOutlined
 } from "@ant-design/icons"
 import type { SingleFileState } from "@ql-react-components/upload-sdk"
 
@@ -16,19 +17,27 @@ const { Text } = Typography
 // 模拟构造所有可能的状态数据
 const MOCK_DATA: SingleFileState[] = [
     { uid: "1", name: "report_2023.pdf", status: "idle", progress: 0 },
-    { uid: "2", name: "big_movie_4k.mp4", status: "calculating", progress: 45 },
-    { uid: "3", name: "pre_calculated_file.zip", status: "ready", progress: 100, hash: "a1b2c3d4" },
-    { uid: "4", name: "connecting_server.png", status: "checking", progress: 0 },
-    { uid: "5", name: "uploading_photos.rar", status: "uploading", progress: 68 },
-    { uid: "6", name: "finished_project.doc", status: "done", progress: 100, hash: "e5f6g7h8" },
-    { uid: "7", name: "error_file_v2.exe", status: "error", progress: 12, errorMsg: "服务器空间不足" },
-    { uid: "8", name: "cancelled_task.dmg", status: "cancelled", progress: 30 }
+    { uid: "2", name: "waiting_in_queue.mp4", status: "queued", progress: 0 },
+    { uid: "3", name: "big_movie_4k.mp4", status: "calculating", progress: 45 },
+    { uid: "4", name: "pre_calculated_file.zip", status: "ready", progress: 100, hash: "a1b2c3d4" },
+    { uid: "5", name: "connecting_server.png", status: "checking", progress: 0 },
+    { uid: "6", name: "uploading_photos.rar", status: "uploading", progress: 68 },
+    { uid: "7", name: "finished_project.doc", status: "done", progress: 100, hash: "e5f6g7h8" },
+    { uid: "8", name: "error_file_v2.exe", status: "error", progress: 12, errorMsg: "服务器空间不足" },
+    { uid: "9", name: "cancelled_task.dmg", status: "cancelled", progress: 30 }
 ]
 
 const StatusGallery = () => {
     // 这是一个纯展示组件，用于参考如何根据 status 渲染不同的 UI
     const renderStatusContent = (item: SingleFileState) => {
         switch (item.status) {
+            case "queued":
+                return {
+                    icon: <ClockCircleOutlined style={{ color: "#8c8c8c" }} />,
+                    text: "队列等待中...",
+                    color: "#8c8c8c",
+                    action: <Button size="small">取消</Button>
+                }
             case "calculating":
                 return {
                     icon: <ScanOutlined spin style={{ color: "#faad14" }} />,
