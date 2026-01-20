@@ -1,5 +1,12 @@
 # @ql-react-components/upload-sdk
 
+## 0.8.1
+
+### Patch Changes
+
+- 修复：使用preCalculate之后状态先变成calculating 然后变成 ready。 之后使用startUpload 状态又会走一遍calculating和ready
+- 补充状态文档中遗漏的queued状态
+
 ## 0.8.0
 
 ### Minor Changes
