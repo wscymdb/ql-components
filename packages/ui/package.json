@@ -1,0 +1,23 @@
+{
+    "name": "@ql-frontend/ui",
+    "version": "0.0.1",
+    "description": "react ui 组件库",
+    "type": "module",
+    "module": "es/index.js",
+    "types": "es/index.d.ts",
+    "scripts": {
+        "dev": "tsup --watch",
+        "build": "tsup"
+    },
+    "keywords": [],
+    "author": "puta",
+    "license": "ISC",
+    "devDependencies": {
+        "@types/react": "18.3.27",
+        "tsup": "^8.5.1"
+    },
+    "peerDependencies": {
+        "react": ">=18",
+        "styled-components": ">=6"
+    }
+}
