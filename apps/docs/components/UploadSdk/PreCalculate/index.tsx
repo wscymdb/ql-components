@@ -1,6 +1,6 @@
 import { Button, message, Upload, UploadProps, Alert } from "antd"
 import { useEffect, useState, useMemo } from "react"
-import { useUpload } from "@ql-react-components/upload-sdk"
+import { useUpload } from "@ql-frontend/upload-sdk"
 import { UploadOutlined } from "@ant-design/icons"
 
 const BigFileUpload = () => {
@@ -66,7 +66,7 @@ const BigFileUpload = () => {
     return (
         <div className="big-file-upload" style={{ padding: 20 }}>
             <Alert
-                title="选择文件后会立马计算hash，你会在filelist中看到进度，demo中结合了antd的upload组件的filelist实现的"
+                title="选择文件后会立马计算hash，你会在fileList中看到进度，demo中结合了antd的upload组件的fileList实现的"
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}

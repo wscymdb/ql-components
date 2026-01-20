@@ -7,5 +7,5 @@
     "access": "public",
     "baseBranch": "main",
     "updateInternalDependencies": "patch",
-    "ignore": ["@ql-react-components/docs"]
+    "ignore": ["@ql-frontend/docs"]
 }

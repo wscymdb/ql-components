@@ -43,7 +43,6 @@ export default defineConfig({
         "**/node_modules/**",
         "**/dist/**",
         "**/lib/**",
-        "**/docs/**",
         "**/stats.html",
         "**/language/**",
         "**/language.ts",

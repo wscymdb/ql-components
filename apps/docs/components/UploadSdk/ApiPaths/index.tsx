@@ -1,7 +1,7 @@
 import React from "react"
 import { Button, message, Upload, UploadProps } from "antd"
 import { useEffect, useRef } from "react"
-import { useUpload } from "@ql-react-components/upload-sdk"
+import { useUpload } from "@ql-frontend/upload-sdk"
 import { UploadOutlined } from "@ant-design/icons"
 
 const BigFileUpload = () => {

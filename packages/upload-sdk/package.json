@@ -1,5 +1,5 @@
 {
-    "name": "@ql-react-components/upload-sdk",
+    "name": "@ql-frontend/upload-sdk",
     "version": "0.9.0",
     "description": "基于react的大文件上传sdk",
     "type": "module",

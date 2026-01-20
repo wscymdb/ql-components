@@ -16,7 +16,7 @@
 ## 📦 安装
 
 ```bash [npm]
-npm i @ql-react-components/upload-sdk@latest
+npm i @ql-frontend/upload-sdk@latest
 ```
 
 ## 使用参考内外文档

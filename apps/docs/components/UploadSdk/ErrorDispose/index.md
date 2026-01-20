@@ -35,7 +35,7 @@ setup({
 你需要使用 `try...catch` 结构，并通过 `UploadBatchError` 获取详细的成功/失败清单。
 
 ```tsx | pure
-import { UploadBatchError } from "@ql-react-components/upload-sdk"
+import { UploadBatchError } from "@ql-frontend/upload-sdk"
 
 const handleUpload = async () => {
     try {

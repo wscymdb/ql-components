@@ -1,5 +1,5 @@
 {
-    "name": "@ql-react-components/docs",
+    "name": "@ql-frontend/docs",
     "version": "0.0.0",
     "description": "组件文档站",
     "private": true,
@@ -15,7 +15,7 @@
     "license": "MIT",
     "dependencies": {
         "@ant-design/icons": "^6.1.0",
-        "@ql-react-components/upload-sdk": "workspace:*",
+        "@ql-frontend/upload-sdk": "workspace:*",
         "antd": "^6.1.0",
         "react": "^18.3.1"
     },

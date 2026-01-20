@@ -10,7 +10,7 @@ import {
     ApiOutlined,
     ClockCircleOutlined
 } from "@ant-design/icons"
-import type { SingleFileState } from "@ql-react-components/upload-sdk"
+import type { SingleFileState } from "@ql-frontend/upload-sdk"
 
 const { Text } = Typography
 

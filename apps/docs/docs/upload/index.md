@@ -25,11 +25,11 @@ toc: content
 :::code-group
 
 ```bash [npm]
-npm i @ql-react-components/upload-sdk
+npm i @ql-frontend/upload-sdk@latest
 ```
 
 ```bash [pnpm]
-pnpm add @ql-react-components/upload-sdk
+pnpm add @ql-frontend/upload-sdk@latest
 ```
 
 ```txt [other]

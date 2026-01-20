@@ -1,6 +1,6 @@
 import { Button, message, Upload, UploadProps, Card, Tag, Space, Alert, Statistic, Row, Col } from "antd"
 import { useEffect, useState, useMemo } from "react"
-import { useUpload } from "@ql-react-components/upload-sdk"
+import { useUpload } from "@ql-frontend/upload-sdk"
 import { UploadOutlined, FileOutlined } from "@ant-design/icons"
 import type { UploadFile } from "antd/es/upload/interface"
 

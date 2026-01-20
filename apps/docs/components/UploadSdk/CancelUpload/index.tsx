@@ -1,6 +1,6 @@
 import { Button, Card, message, Progress, Upload, UploadProps, Tag, Space, Alert } from "antd"
 import { useEffect, useState } from "react"
-import { UploadBatchError, useUpload } from "@ql-react-components/upload-sdk" // 替换为你的包名
+import { UploadBatchError, useUpload } from "@ql-frontend/upload-sdk" // 替换为你的包名
 import { UploadOutlined, FileOutlined, StopOutlined, DeleteOutlined, ReloadOutlined } from "@ant-design/icons"
 import type { UploadFile } from "antd/es/upload/interface"
 

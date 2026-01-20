@@ -12,7 +12,7 @@
 当任务被取消时，`startUpload` 返回的 Promise 会被 Reject。你需要在 `catch` 块中通过 `UploadBatchError` 来识别哪些任务是被取消的。
 
 ```tsx | pure
-import { UploadBatchError } from "@ql-react-components/upload-sdk"
+import { UploadBatchError } from "@ql-frontend/upload-sdk"
 
 const handleUpload = async () => {
     try {

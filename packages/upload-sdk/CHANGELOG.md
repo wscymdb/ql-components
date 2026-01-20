@@ -1,4 +1,4 @@
-# @ql-react-components/upload-sdk
+# @ql-frontend/upload-sdk
 
 ## 0.9.0
 
