@@ -10,7 +10,7 @@
         "dev:ui": "pnpm --filter @ql-frontend/ui dev",
         "dev:docs": "pnpm --filter @ql-frontend/docs dev",
         "dev:sdk": "pnpm --filter @ql-frontend/upload-sdk dev",
-        "dev:window": "concurrently -n \"UI,SDK,DOCS\" -c \"cyan,yellow,magenta\" \"pnpm dev:ui\" \"pnpm dev:sdk\" \"sleep 5 && pnpm dev:docs\"",
+        "dev:window": "concurrently -n \"UI,SDK,DOCS\" -c \"cyan,yellow,magenta\" \"pnpm dev:ui\" \"pnpm dev:sdk\" pnpm dev:docs\"",
         "build:docs": "pnpm --filter @ql-frontend/docs build",
         "preview:docs": "pnpm --filter @ql-frontend/docs preview",
         "build:sdk": "pnpm --filter @ql-frontend/upload-sdk build",
