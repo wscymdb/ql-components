@@ -1,6 +1,6 @@
 {
     "name": "@ql-frontend/upload-sdk",
-    "version": "0.9.0",
+    "version": "0.10.0",
     "description": "基于react的大文件上传sdk",
     "type": "module",
     "module": "es/index.js",

@@ -11,7 +11,8 @@ import type {
     UploadSuccessResult,
     UploadErrorResult,
     SetupConfig,
-    StartUploadOptions
+    StartUploadOptions,
+    TaskConfig
 } from "@/types"
 
 import workerCode from "../../worker/index?worker"
@@ -58,6 +59,10 @@ export class UploadManager {
     // 【新增】存储正在进行 Hash 计算的 Promise：UID -> Promise
     // 作用：防止重复计算，让 startUpload 能“搭便车”
     private pendingHashTasks: Map<string, Promise<string>> = new Map()
+
+    // 【新增】任务配置快照：UID -> TaskConfig
+    // 作用：保存任务创建时的 hooks 和 apiPaths，防止全局配置更新影响队列中的任务
+    private taskConfigMap: Map<string, TaskConfig> = new Map()
 
     // 缓存生成的 Blob URL，避免每次 new Worker 都重新 createObjectURL
     private workerBlobUrl: string | null = null
@@ -172,6 +177,9 @@ export class UploadManager {
         // (虽然 resolve/reject 后通常会手动 delete，这里作为兜底)
         this.promiseMap.delete(uid)
 
+        // 3. 清理任务配置快照
+        this.taskConfigMap.delete(uid)
+
         // 注意：不要删除 this.state[uid]
         // 因为 UI 还需要展示 "Done" 状态和 100% 进度条
     }
@@ -227,8 +235,9 @@ export class UploadManager {
         }
 
         try {
-            // 1. 获取全局配置的 Hook 函数
-            const userHook = this.config.hooks?.[hookName]
+            // 1. 获取任务配置快照，如果不存在则使用全局配置
+            const taskConfig = this.taskConfigMap.get(uid)
+            const userHook = taskConfig?.hooks?.[hookName] || this.config.hooks?.[hookName]
 
             if (userHook && typeof userHook === "function") {
                 // 2. 从注册表中找回 File
@@ -294,8 +303,42 @@ export class UploadManager {
     /**
      * 配置上传管理器
      * - 第一次调用：完整初始化所有配置（必须设置 serverUrl）
-     * - 后续调用：可以更新除 serverUrl 外的所有配置
-     * - hooks 和 apiPaths 会进行深度合并，不会覆盖未指定的字段
+     * - 后续调用：可以更新所有配置
+     *
+     * 【重要】配置更新的分层行为：
+     *
+     * **全局配置（实时生效）**
+     * - `token`, `serverUrl`, `chunkSize`, `chunkConcurrency` 等
+     * - 更新后，所有任务（包括队列中的）立即使用新值
+     * - 适用于运行时参数的动态更新（如 token 刷新）
+     *
+     * **任务配置（快照保存）**
+     * - `hooks`, `apiPaths`
+     * - 更新后，只影响新创建的任务
+     * - 已在队列中的任务仍使用创建时的配置快照
+     * - 这样设计是为了保持任务的上下文一致性
+     *
+     * @example
+     * // 场景 1: 更新 token（所有任务立即生效）
+     * setup({ token: 'new_token' })
+     *
+     * // 场景 2: 更新 hooks（只对新任务生效）
+     * setup({ hooks: { onCheck: newHook } })
+     * // - 队列中的旧任务仍使用旧 hook
+     * // - 新调用 startUpload() 的任务使用新 hook
+     *
+     * // 场景 3: 组件切换时的最佳实践
+     * useEffect(() => {
+     *     setup({
+     *         hooks: {
+     *             onCheck: () => ({ datasetId })
+     *         }
+     *     })
+     *
+     *     return () => {
+     *         manager.reset()  // 组件卸载时清理所有任务
+     *     }
+     * }, [datasetId])
      *
      * @param config 配置对象
      */
@@ -559,7 +602,7 @@ export class UploadManager {
         this.promiseMap.clear()
         this.fileRegistry.clear()
         this.ignoringUIDs.clear()
-        // this.taskHandlers.clear() // 如果你还没删的话
+        this.taskConfigMap.clear()
 
         // 5. 【核心】重置状态为空对象
         this.state = {}
@@ -596,10 +639,17 @@ export class UploadManager {
             } as UploadErrorResult
         }
 
-        // 4. 移出忽略名单
+        // 4. 【关键】在入队前立即保存任务配置快照
+        // 只保存 hooks 和 apiPaths，全局配置（token, serverUrl等）会在执行时实时读取
+        this.taskConfigMap.set(uid, {
+            hooks: { ...this.config.hooks, ...options?.hooks },
+            apiPaths: { ...this.config.apiPaths, ...options?.apiPaths }
+        })
+
+        // 5. 移出忽略名单
         this.ignoringUIDs.delete(uid)
 
-        // 5. 注册文件引用
+        // 6. 注册文件引用
         this.fileRegistry.set(uid, rawFile)
 
         // 6. 先设置为 queued 状态
@@ -616,11 +666,22 @@ export class UploadManager {
             // 进入并发控制器后,开始实际的上传流程
             // ============================================================
 
-            // 合并配置(不修改 this.config)
+            // 【关键】合并配置：全局配置实时读取 + 任务配置使用快照
+            const taskConfig = this.taskConfigMap.get(uid)!
             const finalConfig = {
-                ...this.config,
-                hooks: { ...this.config.hooks, ...options?.hooks },
-                apiPaths: { ...this.config.apiPaths, ...options?.apiPaths }
+                // 全局配置：实时读取，支持动态更新
+                serverUrl: this.config.serverUrl,
+                token: this.config.token,
+                chunkSize: this.config.chunkSize,
+                chunkConcurrency: this.config.chunkConcurrency,
+                checkEnabled: this.config.checkEnabled,
+                preventWindowClose: this.config.preventWindowClose,
+                showLog: this.config.showLog,
+                uploadConcurrency: this.config.uploadConcurrency,
+                hashConcurrency: this.config.hashConcurrency,
+                // 任务配置：使用快照，不受全局配置更新影响
+                hooks: taskConfig.hooks,
+                apiPaths: taskConfig.apiPaths
             }
 
             // 处理 serverUrl 相对路径 (适配开发环境 Proxy)

@@ -235,3 +235,13 @@ export interface StartUploadOptions {
     hooks?: UploadConfig["hooks"]
     apiPaths?: UploadConfig["apiPaths"]
 }
+
+/**
+ * 任务级配置快照（只包含需要快照的配置项）
+ * - hooks: 业务钩子函数，绑定到任务创建时的上下文
+ * - apiPaths: API 路径配置，绑定到任务创建时的配置
+ */
+export interface TaskConfig {
+    hooks?: UploadConfig["hooks"]
+    apiPaths?: UploadConfig["apiPaths"]
+}

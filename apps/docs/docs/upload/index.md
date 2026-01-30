@@ -42,10 +42,15 @@ pnpm add @ql-frontend/upload-sdk@latest
 
 :::warning
 **⚠️ 关于配置的最佳实践**
-本 SDK 采用 **单例模式** 管理状态。
+本 SDK 采用 **单例模式** + **分层配置快照** 管理状态。
 
-- **配置管理**:使用 `setup()` 方法配置上传管理器。第一次调用时会完整初始化所有配置（必须设置 `serverUrl`），后续调用可以更新除 `serverUrl` 外的所有配置。`hooks` 和 `apiPaths` 会深度合并，非常适合 React 组件中依赖变化时重新设置 hooks。
-- **单文件配置**:如果某个文件需要特殊处理,可以在上传时传入 `options`:`await startUpload(file, { hooks: {...}, apiPaths: {...} })`
+- **配置管理**: 使用 `setup()` 方法配置上传管理器。第一次调用时会完整初始化所有配置（必须设置 `serverUrl`），后续调用可以更新所有配置。
+- **分层配置**:
+    - **全局配置**（`token`、`serverUrl` 等）：更新后所有任务立即生效
+    - **任务配置**（`hooks`、`apiPaths`）：只对新创建的任务生效，队列中的任务使用创建时的快照
+- **单文件配置**: 如果某个文件需要特殊处理，可以在上传时传入 `options`：`await startUpload(file, { hooks: {...}, apiPaths: {...} })`
+
+详细说明请查看 [分层配置快照](/upload/layered-config) 文档。
 
 :::
 
