@@ -6,8 +6,8 @@
     "module": "es/index.js",
     "types": "es/index.d.ts",
     "scripts": {
-        "dev": "NODE_ENV=development tsup --watch",
-        "build": "NODE_ENV=production tsup"
+        "dev": "cross-env NODE_ENV=development tsup --watch",
+        "build": "cross-env NODE_ENV=production tsup"
     },
     "files": [
         "es",

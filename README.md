@@ -61,8 +61,13 @@ pnpm dev
 ## 构建
 
 ```bash
+# 构建 SDK
 pnpm build:sdk
+
+# 构建 UI 组件库
+pnpm build:ui
 ```
+
 
 ## 安装依赖
 
@@ -114,10 +119,13 @@ pnpm add --filter ql-components dayjs
 # 发包流程
 
 ```bash
-# 1. 构建子包 如果已经构建过了可以跳过这一步
+# 1. 构建子包（发哪个就打包哪个，如果已经构建过了可以跳过）
+# 如果发 sdk:
 pnpm build:sdk
+# 如果发 ui:
+pnpm build:ui
 
-# 2. 登录 如果登录过了可以跳过这一步
+# 2. 登录 如果登录过了可以跳过（注意：登录和发包必须使用 npm 官方源。若使用了淘宝等国内镜像，需切换回官方源：npm config set registry https://registry.npmjs.org/）
 pnpm login
 
 # 3. 创建 changeset（收集变更信息）
@@ -126,6 +134,6 @@ pnpm changeset
 # 4. 应用 changeset，升级版本号
 pnpm changeset version
 
-# 5. 发布
+# 5. 发布（发布时同样需确保使用官方源）
 pnpm changeset publish
 ```

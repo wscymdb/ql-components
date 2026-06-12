@@ -48,6 +48,8 @@ export default defineConfig({
         "**/language.ts",
         "**/package.json",
         "eslint.config.js",
-        "pnpm-lock.yaml"
+        "pnpm-lock.yaml",
+        "**/*.dumirc.ts",
+        "cspell.config.js"
     ]
 })

@@ -12,3 +12,5 @@ Parens
 tseslint
 tsup
 Uids
+Popconfirm
+dumirc
