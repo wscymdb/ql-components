@@ -1,7 +1,7 @@
 ---
-title: ui 组件库
+title: 组件库说明
 toc: content
 order: 1
 ---
 
-ui 组件库 演示
+内部专用组件库

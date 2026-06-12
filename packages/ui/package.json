@@ -18,6 +18,9 @@
     },
     "peerDependencies": {
         "react": ">=18",
-        "styled-components": ">=6"
+        "antd": ">=5",
+        "styled-components": ">=6",
+        "@ant-design/pro-components": ">=2",
+        "@ant-design/icons": ">=5"
     }
 }

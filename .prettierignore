@@ -1,3 +1,5 @@
 .dumi/tmp
 .dumi/tmp-production
 *.yaml
+**/*.md
+

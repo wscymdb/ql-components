@@ -14,6 +14,7 @@
         "build:docs": "pnpm --filter @ql-frontend/docs build",
         "preview:docs": "pnpm --filter @ql-frontend/docs preview",
         "build:sdk": "pnpm --filter @ql-frontend/upload-sdk build",
+        "build:ui": "pnpm --filter @ql-frontend/ui build",
         "lint:es": "eslint",
         "lint:fix": "eslint --fix",
         "lint:style": "stylelint \"{packages,apps}/**/*.css\" ",

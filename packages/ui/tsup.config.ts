@@ -7,5 +7,6 @@ export default defineConfig({
     clean: true,
     outDir: "es",
     format: ["esm"],
-    dts: true
+    dts: true,
+    external: ["react", "react-dom", "antd", "@ant-design/icons", "@ant-design/pro-components", "styled-components"]
 })
