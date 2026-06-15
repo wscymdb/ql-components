@@ -12,6 +12,7 @@
 | `showExpandIcon` | 是否显示折叠/展开图标。支持布尔值或动态判断函数（默认不显示） | `boolean \| ((row: T) => boolean)` | `false` |
 | `readonly` | 是否为只读/纯展示模式。为 `true` 时禁用所有编辑框、隐藏操作列和新增按钮 | `boolean` | `false` |
 
+
 ---
 
 ## Columns 列定义
@@ -105,6 +106,8 @@ export interface TableActionConfig<T> {
     popconfirmProps?: Omit<PopconfirmProps, "children">;
     // 是否展示确认气泡，支持静态 boolean 或传入函数动态判定（默认为 true）
     showPopconfirm?: boolean | ((row: T) => boolean);
+    // 当只有一条数据时，是否允许删除该数据（默认为 true）
+    allowDeleteOnlyOne?: boolean;
   };
   // 新增子项操作配置
   addSub?: {

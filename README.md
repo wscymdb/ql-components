@@ -118,6 +118,8 @@ pnpm add --filter ql-components dayjs
 
 # 发包流程
 
+> **⚠️ 注意**：所有的日常代码改动应在对应的功能分支（如 `ui`、`upload` 分支）上进行，**发包操作（创建 changeset、升级版本和 publish）必须统一在 `main` 分支上执行**。发包前请确保已将对应功能分支合并到 `main` 分支。
+
 ```bash
 # 1. 构建子包（发哪个就打包哪个，如果已经构建过了可以跳过）
 # 如果发 sdk:

@@ -6,9 +6,22 @@ export interface DeleteActionProps<T extends BaseTreeRecord> {
     row: T
     config: any
     deleteConfig: TableActionConfig<T>["delete"]
+    isOnlyOne?: boolean
 }
 
-export const DeleteAction = <T extends BaseTreeRecord>({ row, config, deleteConfig }: DeleteActionProps<T>) => {
+export const DeleteAction = <T extends BaseTreeRecord>({
+    row,
+    config,
+    deleteConfig,
+    isOnlyOne = false
+}: DeleteActionProps<T>) => {
+    const allowDeleteOnlyOne = deleteConfig?.allowDeleteOnlyOne ?? true
+
+    // NOTE: 当只有一条数据且配置为不允许删除时，隐藏删除按钮
+    if (isOnlyOne && !allowDeleteOnlyOne) {
+        return null
+    }
+
     const deleteIcon = deleteConfig?.icon ?? <DeleteOutlined style={{ cursor: "pointer" }} />
     const finalTooltipProps = {
         title: "删除",

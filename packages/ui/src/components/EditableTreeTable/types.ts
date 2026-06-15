@@ -70,6 +70,8 @@ export interface TableActionConfig<T> {
         popconfirmProps?: Omit<PopconfirmProps, "children">
         /** 是否展示确认气泡，支持静态 boolean 或根据行数据动态返回，默认为 true */
         showPopconfirm?: boolean | ((row: T) => boolean)
+        /** 当只有一条数据时，是否允许删除，默认为 true */
+        allowDeleteOnlyOne?: boolean
     }
     /** 新增子项操作的配置 */
     addSub?: {
