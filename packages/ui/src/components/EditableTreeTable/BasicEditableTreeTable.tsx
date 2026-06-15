@@ -116,7 +116,13 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
 
     const actionRender: RowEditableConfig<T>["actionRender"] = (row, config) => {
         return [
-            <DeleteAction key="delete" row={row} config={config} deleteConfig={actionConfig?.delete} />,
+            <DeleteAction
+                key="delete"
+                row={row}
+                config={config}
+                deleteConfig={actionConfig?.delete}
+                isOnlyOne={value.length === 1}
+            />,
             <AddSubAction
                 key="addSub"
                 row={row}
