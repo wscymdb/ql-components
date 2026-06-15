@@ -1,5 +1,11 @@
 # @ql-frontend/ui
 
+## 1.0.1
+
+### Patch Changes
+
+- **可编辑树形表格删除配置**: 在 `actionConfig.delete` 配置项中新增 `allowDeleteOnlyOne` 属性，用于控制当表格仅存一条顶级数据时是否允许执行删除操作（默认为 `true`）。当配置为 `false` 且数据仅剩一条时，删除按钮将自动隐藏。
+
 ## 1.0.0
 
 ### Major Changes
