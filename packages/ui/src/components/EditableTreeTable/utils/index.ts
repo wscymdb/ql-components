@@ -17,7 +17,9 @@ export const generateId = (): number => {
  * @returns 更新后的树形数据
  */
 export const insertChild = (list: readonly any[], parentId: React.Key, childNode: any): any[] => {
+    if (!Array.isArray(list)) return []
     return list.map(item => {
+        if (!item) return item
         if (String(item.id) === String(parentId)) {
             const children = item.children ? [...item.children] : []
             return {
@@ -43,9 +45,12 @@ export const insertChild = (list: readonly any[], parentId: React.Key, childNode
 export const getAllRowKeys = (list: readonly any[]): React.Key[] => {
     const keys: React.Key[] = []
     const traverse = (nodes: readonly any[]) => {
+        if (!Array.isArray(nodes)) return
         nodes.forEach(node => {
-            keys.push(node.id)
-            if (node.children && node.children.length > 0) {
+            if (node && node.id !== undefined && node.id !== null) {
+                keys.push(node.id)
+            }
+            if (node && node.children && node.children.length > 0) {
                 traverse(node.children)
             }
         })
@@ -62,9 +67,12 @@ export const getAllRowKeys = (list: readonly any[]): React.Key[] => {
 export const getParentRowKeys = (list: readonly any[]): React.Key[] => {
     const keys: React.Key[] = []
     const traverse = (nodes: readonly any[]) => {
+        if (!Array.isArray(nodes)) return
         nodes.forEach(node => {
-            if (node.children && node.children.length > 0) {
-                keys.push(node.id)
+            if (node && node.children && node.children.length > 0) {
+                if (node.id !== undefined && node.id !== null) {
+                    keys.push(node.id)
+                }
                 traverse(node.children)
             }
         })
