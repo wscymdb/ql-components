@@ -1,5 +1,11 @@
 # @ql-frontend/ui
 
+## 1.2.1
+
+### Patch Changes
+
+- 修复容量限制导致误折叠及单个数据删除按钮误隐藏的 Bug
+
 ## 1.2.0
 
 ### Minor Changes
