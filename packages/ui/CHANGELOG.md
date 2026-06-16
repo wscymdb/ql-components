@@ -1,5 +1,11 @@
 # @ql-frontend/ui
 
+## 1.0.2
+
+### Patch Changes
+
+- 修复EditableTreeTable树数据遍历工具函数中缺少非空及数组校验导致的潜在报错
+
 ## 1.0.1
 
 ### Patch Changes
