@@ -1,6 +1,7 @@
 import { DeleteOutlined } from "@ant-design/icons"
 import { Tooltip, Popconfirm } from "antd"
 import type { BaseTreeRecord, TableActionConfig } from "../types"
+import { useTableContext } from "../context"
 
 export interface DeleteActionProps<T extends BaseTreeRecord> {
     row: T
@@ -15,6 +16,7 @@ export const DeleteAction = <T extends BaseTreeRecord>({
     deleteConfig,
     isOnlyOne = false
 }: DeleteActionProps<T>) => {
+    const { getRowKey } = useTableContext()
     const allowDeleteOnlyOne = deleteConfig?.allowDeleteOnlyOne ?? true
 
     // NOTE: 当只有一条数据且配置为不允许删除时，隐藏删除按钮
@@ -29,7 +31,8 @@ export const DeleteAction = <T extends BaseTreeRecord>({
     }
 
     const runDelete = () => {
-        config?.onDelete?.(row.id, row)
+        const key = getRowKey(row)
+        config?.onDelete?.(key, row)
     }
 
     const hasPopconfirm = (() => {
