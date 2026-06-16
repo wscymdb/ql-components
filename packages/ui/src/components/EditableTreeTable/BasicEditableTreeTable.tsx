@@ -56,8 +56,8 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         editableKeys: controlledEditableKeys,
         onChangeEditableKeys,
         expandedRowKeys: controlledExpandedRowKeys,
-
-        onChangeExpandedRowKeys
+        onChangeExpandedRowKeys,
+        canAddSubItem
     })
 
     // NOTE: 智能追加操作列。如果外部传入的 columns 中没有配置 valueType 为 option 的列，
