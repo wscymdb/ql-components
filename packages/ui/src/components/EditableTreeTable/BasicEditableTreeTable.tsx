@@ -1,13 +1,14 @@
 import type { RowEditableConfig } from "@ant-design/pro-components"
 import { EditableProTable } from "@ant-design/pro-components"
-import React, { useImperativeHandle } from "react"
-import { generateId, insertChild } from "./utils"
+import React, { useImperativeHandle, useMemo } from "react"
+import { generateId, insertChild, getRowKey, detectKeyField } from "./utils"
 import EmptyState from "./components/EmptyState"
 import DeleteAction from "./components/DeleteAction"
 import AddSubAction from "./components/AddSubAction"
 import type { BaseTreeRecord, BasicEditableTreeTableProps, EditableTreeTableRef } from "./types"
 import { useEditableTreeTable } from "./hooks/useEditableTreeTable"
 import type { FormInstance } from "antd/lib/form"
+import { TableContext } from "./context"
 
 // NOTE: 使用外部定义的 EMPTY_ARRAY 统一空值引用，避免每次渲染直接分配 `[]` 新引用，
 // 导致 useMemo 依赖比对失效或子组件（如 EditableProTable）发生重复渲染。
@@ -37,7 +38,8 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         onChangeExpandedRowKeys,
         actionConfig,
         showExpandIcon,
-        readonly = false
+        readonly = false,
+        rowKey = "id"
     } = props
 
     const value = Array.isArray(props.value) ? props.value : (EMPTY_ARRAY as T[])
@@ -57,8 +59,18 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         onChangeEditableKeys,
         expandedRowKeys: controlledExpandedRowKeys,
         onChangeExpandedRowKeys,
-        canAddSubItem
+        canAddSubItem,
+        rowKey
     })
+
+    // 缓存 Context Value 以避免非必要重绘
+    const contextValue = useMemo(
+        () => ({
+            rowKey,
+            getRowKey: (record: any) => getRowKey(record, rowKey)
+        }),
+        [rowKey]
+    )
 
     // NOTE: 智能追加操作列。如果外部传入的 columns 中没有配置 valueType 为 option 的列，
     // 我们在内部自动追加一个默认的操作列，以确保组件默认开箱即用。
@@ -86,18 +98,20 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
 
         const newId = generateId()
         const newSubItem = createSubItemRecord(row, newId)
+        const rowId = getRowKey(row, rowKey)
+        const newSubItemKey = getRowKey(newSubItem, rowKey)
 
-        const newDataSource = insertChild(value, row.id, newSubItem)
+        const newDataSource = insertChild(value, rowId, newSubItem, rowKey)
         onChange?.(newDataSource)
 
         // 激活新节点的编辑态
-        setEditableRowKeys(prev => [...prev, newId])
+        setEditableRowKeys(prev => [...prev, newSubItemKey])
 
         // 自动展开该父节点，以展示新插入的子节点
         setExpandedRowKeys(prev => {
-            const exists = prev.some(key => String(key) === String(row.id))
+            const exists = prev.some(key => String(key) === String(rowId))
             if (!exists) {
-                return [...prev, row.id]
+                return [...prev, rowId]
             }
             return prev
         })
@@ -107,7 +121,20 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
     const generateRootItem = (): T => {
         const newId = generateId()
 
-        return createRootItemRecord ? createRootItemRecord(newId) : ({ id: newId } as T)
+        if (createRootItemRecord) {
+            return createRootItemRecord(newId)
+        }
+
+        if (typeof rowKey === "string") {
+            return { [rowKey]: newId } as unknown as T
+        }
+
+        if (typeof rowKey === "function") {
+            const detectedKey = detectKeyField(rowKey)
+            return { [detectedKey]: newId } as unknown as T
+        }
+
+        return { id: newId } as unknown as T
     }
 
     // 专门针对表格无数据（空状态）时，添加首行顶层数据的处理方法
@@ -115,8 +142,9 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         const newRootItem = generateRootItem()
         onChange?.([...value, newRootItem])
 
+        const newRootItemKey = getRowKey(newRootItem, rowKey)
         // 激活新节点的编辑态
-        setEditableRowKeys(prev => [...prev, newRootItem.id])
+        setEditableRowKeys(prev => [...prev, newRootItemKey])
     }
 
     const actionRender: RowEditableConfig<T>["actionRender"] = (row, config) => {
@@ -161,50 +189,54 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
     // 没有数据就只展示一个添加按钮 不显示表头
     if ((!value || value?.length === 0) && !showHeaderOnEmpty && !readonly) {
         return (
-            <EmptyState
-                style={style}
-                className={className}
-                recordCreatorProps={recordCreatorProps}
-                onAdd={addRootItem}
-            />
+            <TableContext.Provider value={contextValue}>
+                <EmptyState
+                    style={style}
+                    className={className}
+                    recordCreatorProps={recordCreatorProps}
+                    onAdd={addRootItem}
+                />
+            </TableContext.Provider>
         )
     }
 
     return (
-        <EditableProTable<T>
-            editableFormRef={formRef}
-            rowKey="id"
-            value={value}
-            style={style}
-            className={className}
-            // NOTE: 在实时编辑同步模式下，所有行在未保存前都是 Form 的临时编辑数据。
-            // 此时表格增、删、改等所有交互都会作为 Form 值变更触发 editable.onValuesChange，而不会触发 Table 级别的 onChange。
-            // 因此这里无需配置 Table 级别的 onChange，完全由下面的 editable.onValuesChange 负责更新并同步最新的 recordList 给外部的 onChange。
-            columns={finalColumns}
-            indentSize={indentSize}
-            actionRef={actionRef}
-            expandable={{
-                expandIcon:
-                    typeof showExpandIcon === "function"
-                        ? showExpandIcon
-                        : showExpandIcon === true
-                          ? undefined
-                          : () => null,
-                expandedRowKeys,
-                onExpandedRowsChange: keys => setExpandedRowKeys(keys as React.Key[])
-            }}
-            scroll={{
-                x: "max-content"
-            }}
-            recordCreatorProps={getRecordCreatorProps()}
-            editable={{
-                type: "multiple",
-                editableKeys: readonly ? [] : editableKeys,
-                onChange: setEditableRowKeys,
-                actionRender: actionRenderProp || actionRender,
-                onValuesChange
-            }}
-        />
+        <TableContext.Provider value={contextValue}>
+            <EditableProTable<T>
+                editableFormRef={formRef}
+                rowKey={rowKey}
+                value={value}
+                style={style}
+                className={className}
+                // NOTE: 在实时编辑同步模式下，所有行在未保存前都是 Form 的临时编辑数据。
+                // 此时表格增、删、改等所有交互都会作为 Form 值变更触发 editable.onValuesChange，而不会触发 Table 级别的 onChange。
+                // 因此这里无需配置 Table 级别的 onChange，完全由下面的 editable.onValuesChange 负责更新并同步最新的 recordList 给外部的 onChange。
+                columns={finalColumns}
+                indentSize={indentSize}
+                actionRef={actionRef}
+                expandable={{
+                    expandIcon:
+                        typeof showExpandIcon === "function"
+                            ? showExpandIcon
+                            : showExpandIcon === true
+                              ? undefined
+                              : () => null,
+                    expandedRowKeys,
+                    onExpandedRowsChange: keys => setExpandedRowKeys(keys as React.Key[])
+                }}
+                scroll={{
+                    x: "max-content"
+                }}
+                recordCreatorProps={getRecordCreatorProps()}
+                editable={{
+                    type: "multiple",
+                    editableKeys: readonly ? [] : editableKeys,
+                    onChange: setEditableRowKeys,
+                    actionRender: actionRenderProp || actionRender,
+                    onValuesChange
+                }}
+            />
+        </TableContext.Provider>
     )
 }
 

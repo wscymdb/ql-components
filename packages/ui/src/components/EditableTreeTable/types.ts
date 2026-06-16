@@ -5,7 +5,7 @@ import React from "react"
  * 通用的行数据结构约束，必须含有 id，可能有 parentKey 和 children
  */
 export interface BaseTreeRecord {
-    id: React.Key
+    id?: React.Key
     parentKey?: React.Key
     children?: BaseTreeRecord[]
     [key: string]: any
@@ -19,12 +19,19 @@ export type TreeRecordCreatorProps<T> =
     | false
 
 /**
+ * 可编辑树形表格的 RowKey 配置类型，支持属性名字符串或根据 record 动态返回 Key 的函数
+ */
+export type TreeRowKeyType<T = any> = string | ((record: T) => React.Key)
+
+/**
  * 通用可编辑树形表格的 Props 定义
  */
 export interface BasicEditableTreeTableProps<T extends BaseTreeRecord> {
     value?: T[]
     onChange?: (value: T[]) => void
     columns: ProColumns<T>[]
+    /** 行数据的唯一键标识，支持字符串或函数，默认为 'id' */
+    rowKey?: TreeRowKeyType<T>
     /** 允许业务组件定义：如何初始化一个子节点的数据 */
     createSubItemRecord?: (parentRow: T, newId: React.Key) => T
     /** 允许业务组件定义：如何初始化一个顶层节点的数据 */

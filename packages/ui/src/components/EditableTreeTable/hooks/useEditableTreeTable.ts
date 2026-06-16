@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react"
-import { getAllRowKeys, getParentRowKeys, isFunction } from "../utils"
-import type { BaseTreeRecord } from "../types"
+import { getAllRowKeys, getParentRowKeys, isFunction, getRowKey, isValidKey } from "../utils"
+import type { BaseTreeRecord, TreeRowKeyType } from "../types"
 
 interface UseEditableTreeTableProps<T> {
     value: T[]
@@ -9,17 +9,23 @@ interface UseEditableTreeTableProps<T> {
     onChangeEditableKeys?: (keys: React.Key[]) => void
     onChangeExpandedRowKeys?: (keys: React.Key[]) => void
     canAddSubItem?: (row: T) => boolean
+    rowKey?: TreeRowKeyType<T>
 }
 
 export type KeysOrUpdater = React.Key[] | ((prev: React.Key[]) => React.Key[])
 export type KeysSetter = (nextKeysOrUpdater: KeysOrUpdater) => void
 
 // NOTE: 递归扁平化树节点，以便快速对比新旧数据
-const buildTreeMap = <T extends BaseTreeRecord>(nodes: T[], map: Map<React.Key, T>) => {
+const buildTreeMap = <T extends BaseTreeRecord>(nodes: T[], map: Map<React.Key, T>, rowKey?: TreeRowKeyType<T>) => {
     nodes.forEach(node => {
-        map.set(node.id, node)
+        if (node) {
+            const key = getRowKey(node, rowKey)
+            if (isValidKey(key)) {
+                map.set(key, node)
+            }
+        }
         if (node.children) {
-            buildTreeMap(node.children as T[], map)
+            buildTreeMap(node.children as T[], map, rowKey)
         }
     })
 }
@@ -37,7 +43,8 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
 
         onChangeEditableKeys,
         onChangeExpandedRowKeys,
-        canAddSubItem
+        canAddSubItem,
+        rowKey
     } = props
 
     const [internalExpandedRowKeys, setInternalExpandedRowKeys] = useState<React.Key[]>([])
@@ -45,7 +52,7 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
     const [prevValue, setPrevValue] = useState<T[]>(value)
 
     // 使用 useMemo 缓存所有节点 ID，作为非受控下的可编辑 keys 来源（避免使用 useEffect 异步/同步更新 state 导致的死循环渲染）
-    const computedEditableKeys = useMemo(() => getAllRowKeys(value), [value])
+    const computedEditableKeys = useMemo(() => getAllRowKeys(value, rowKey), [value, rowKey])
 
     // 合并受控与非受控状态
     const editableKeys = controlledEditableKeys !== undefined ? controlledEditableKeys : computedEditableKeys
@@ -82,10 +89,10 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
 
         if (canAddSubItem) {
             const oldMap = new Map<React.Key, T>()
-            buildTreeMap(prevValue, oldMap)
+            buildTreeMap(prevValue, oldMap, rowKey)
 
             const newMap = new Map<React.Key, T>()
-            buildTreeMap(value, newMap)
+            buildTreeMap(value, newMap, rowKey)
 
             const toExpand: React.Key[] = []
             const toCollapse: React.Key[] = []
@@ -143,7 +150,7 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
     if (!isExpandedControlled && valueLength > 0 && prevValueLength === 0) {
         // 渲染阶段直接调整 State（React 18 官方推荐的派生状态更新方式，避免了 useEffect 的二次重绘及 setTimeout 延迟）
         setPrevValueLength(valueLength)
-        setInternalExpandedRowKeys(getParentRowKeys(value))
+        setInternalExpandedRowKeys(getParentRowKeys(value, rowKey))
     } else if (valueLength !== prevValueLength) {
         setPrevValueLength(valueLength)
     }
