@@ -99,10 +99,14 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
 
             newMap.forEach((newNode, id) => {
                 const oldNode = oldMap.get(id)
-                const canHaveSub = canAddSubItem(newNode)
+
+                // 💡 使用空 children 评估节点的“结构化容器属性”（排除 children 当前数量对判定的干扰）
+                // 这样当节点仅仅是因为子项满载而导致不能添加时，不会被误判为“不可添加子节点的非容器类型”，从而避免误折叠
+                const checkStructurally = (node: T) => canAddSubItem({ ...node, children: [] })
+                const canHaveSub = checkStructurally(newNode)
 
                 if (oldNode) {
-                    const wasAbleToHaveSub = canAddSubItem(oldNode)
+                    const wasAbleToHaveSub = checkStructurally(oldNode)
 
                     // 情况 1：从“不可添加子节点”变回“可以添加”，且包含历史子节点数据 -> 自动展开
                     if (!wasAbleToHaveSub && canHaveSub && newNode.children && newNode.children.length > 0) {
