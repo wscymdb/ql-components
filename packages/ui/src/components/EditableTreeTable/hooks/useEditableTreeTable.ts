@@ -96,15 +96,16 @@ export function useEditableTreeTable<T extends BaseTreeRecord>(props: UseEditabl
 
                 if (oldNode) {
                     const wasAbleToHaveSub = canAddSubItem(oldNode)
-                    // 从“不可添加子节点”变回“可以添加”，且包含历史子节点数据 -> 自动展开
+
+                    // 情况 1：从“不可添加子节点”变回“可以添加”，且包含历史子节点数据 -> 自动展开
                     if (!wasAbleToHaveSub && canHaveSub && newNode.children && newNode.children.length > 0) {
                         toExpand.push(id)
                     }
-                }
 
-                // 如果新状态下不支持子节点 -> 自动折叠
-                if (!canHaveSub) {
-                    toCollapse.push(id)
+                    // 情况 2：从“可以添加子节点”变为“不可添加” -> 自动折叠
+                    if (wasAbleToHaveSub && !canHaveSub) {
+                        toCollapse.push(id)
+                    }
                 }
             })
 
