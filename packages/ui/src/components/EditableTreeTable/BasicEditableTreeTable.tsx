@@ -9,6 +9,10 @@ import type { BaseTreeRecord, BasicEditableTreeTableProps, EditableTreeTableRef 
 import { useEditableTreeTable } from "./hooks/useEditableTreeTable"
 import type { FormInstance } from "antd/lib/form"
 
+// NOTE: 使用外部定义的 EMPTY_ARRAY 统一空值引用，避免每次渲染直接分配 `[]` 新引用，
+// 导致 useMemo 依赖比对失效或子组件（如 EditableProTable）发生重复渲染。
+const EMPTY_ARRAY: any[] = []
+
 const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
     props: BasicEditableTreeTableProps<T>,
     ref: React.Ref<EditableTreeTableRef>
@@ -21,7 +25,6 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         recordCreatorProps,
         editableKeys: controlledEditableKeys,
         expandedRowKeys: controlledExpandedRowKeys,
-        value = [],
         showHeaderOnEmpty = false,
         indentSize = 24,
 
@@ -37,6 +40,8 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         readonly = false
     } = props
 
+    const value = Array.isArray(props.value) ? props.value : (EMPTY_ARRAY as T[])
+
     const formRef = React.useRef<FormInstance>()
 
     // 暴露 validate 校验方法和内部的 form 实例给外部
@@ -51,8 +56,8 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         editableKeys: controlledEditableKeys,
         onChangeEditableKeys,
         expandedRowKeys: controlledExpandedRowKeys,
-
-        onChangeExpandedRowKeys
+        onChangeExpandedRowKeys,
+        canAddSubItem
     })
 
     // NOTE: 智能追加操作列。如果外部传入的 columns 中没有配置 valueType 为 option 的列，
