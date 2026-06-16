@@ -1,5 +1,14 @@
 # @ql-frontend/ui
 
+## 1.2.0
+
+### Minor Changes
+
+#### EditableTreeTable
+
+- 新增并导出了 fillTreeKeys 递归预处理函数，自动为缺少唯一 ID 的树节点遍历补齐符合 isValidKey 校验规则的唯一 ID，解决后端接口数据缺失 ID 导致树型表格折叠状态异常的问题。
+- 添加rowkey字段
+
 ## 1.1.1
 
 ### Patch Changes
