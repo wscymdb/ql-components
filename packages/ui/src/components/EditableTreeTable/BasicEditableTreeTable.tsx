@@ -1,7 +1,7 @@
 import type { RowEditableConfig } from "@ant-design/pro-components"
 import { EditableProTable } from "@ant-design/pro-components"
 import React, { useImperativeHandle, useMemo } from "react"
-import { generateId, insertChild, getRowKey, detectKeyField, getAllRowKeys } from "./utils"
+import { generateId, insertChild, getRowKey, detectKeyField } from "./utils"
 import EmptyState from "./components/EmptyState"
 import DeleteAction from "./components/DeleteAction"
 import AddSubAction from "./components/AddSubAction"
@@ -147,19 +147,18 @@ const BasicEditableTreeTableInner = <T extends BaseTreeRecord>(
         setEditableRowKeys(prev => [...prev, newRootItemKey])
     }
 
-    // 计算整个树的所有节点总数，用于判定整个表格是否仅剩下一条数据
-    const totalNodeCount = React.useMemo(() => {
-        return getAllRowKeys(value, rowKey).length
-    }, [value, rowKey])
-
     const actionRender: RowEditableConfig<T>["actionRender"] = (row, config) => {
+        const rowId = getRowKey(row, rowKey)
+        // 💡 判断当前行是否是根节点（在顶层 value 数组中存在）
+        const isRoot = value.some(item => getRowKey(item, rowKey) === rowId)
+
         return [
             <DeleteAction
                 key="delete"
                 row={row}
                 config={config}
                 deleteConfig={actionConfig?.delete}
-                isOnlyOne={totalNodeCount === 1}
+                isOnlyOne={isRoot && value.length === 1}
             />,
             <AddSubAction
                 key="addSub"
