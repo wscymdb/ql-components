@@ -1,5 +1,11 @@
 # @ql-frontend/ui
 
+## 1.2.2
+
+### Patch Changes
+
+- EditableTreeTable修复allowDeleteOnlyOne不生效问题
+
 ## 1.2.1
 
 ### Patch Changes
